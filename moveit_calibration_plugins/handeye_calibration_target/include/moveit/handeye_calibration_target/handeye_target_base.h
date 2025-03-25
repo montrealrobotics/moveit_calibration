@@ -50,15 +50,21 @@
 #include <tf2/LinearMath/Matrix3x3.h>
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_eigen/tf2_eigen.hpp>
+#include <opencv2/aruco/charuco.hpp>
 
 namespace moveit_handeye_calibration
 {
 namespace
 {
 const rclcpp::Logger LOGGER_CALIBRATION_TARGET = rclcpp::get_logger("moveit_handeye_calibration_target");
-constexpr size_t LOG_THROTTLE_PERIOD = 2;
+constexpr size_t LOG_THROTTLE_PERIOD = 200;
 }  // namespace
 
+const std::map<std::string, cv::aruco::PREDEFINED_DICTIONARY_NAME> ARUCO_DICTIONARY = {
+  { "DICT_4X4_250", cv::aruco::DICT_4X4_250 }, { "DICT_5X5_250", cv::aruco::DICT_5X5_250 },
+  { "DICT_5X5_100", cv::aruco::DICT_5X5_100 }, { "DICT_6X6_250", cv::aruco::DICT_6X6_250 },
+  { "DICT_7X7_250", cv::aruco::DICT_7X7_250 }, { "DICT_ARUCO_ORIGINAL", cv::aruco::DICT_ARUCO_ORIGINAL }
+};
 /**
  * @class HandEyeTargetBase
  * @brief Provides an interface for handeye calibration target detectors.
@@ -79,10 +85,16 @@ public:
       float f;
       std::size_t e;
     } value_;
-    const std::vector<std::string> enum_values_;
 
-    Parameter(std::string name, ParameterType parameter_type, int default_value = 0)
-      : name_(name), parameter_type_(parameter_type)
+    const std::vector<std::string> enum_values_;
+    const enum ParameterMode {
+      CREATE_ONLY,
+      LOAD_ONLY,
+      BOTH
+    } mode_;
+
+    Parameter(std::string name, ParameterType parameter_type, ParameterMode mode, int default_value = 0)
+      : name_(name), parameter_type_(parameter_type), mode_(mode)
     {
       if (parameter_type_ == ParameterType::Int)
         value_.i = default_value;
@@ -91,8 +103,8 @@ public:
                      name.c_str());
     }
 
-    Parameter(std::string name, ParameterType parameter_type, float default_value = 0.)
-      : name_(name), parameter_type_(parameter_type)
+    Parameter(std::string name, ParameterType parameter_type, ParameterMode mode, float default_value = 0.)
+      : name_(name), parameter_type_(parameter_type), mode_(mode)
     {
       if (parameter_type_ == ParameterType::Float)
         value_.f = default_value;
@@ -101,8 +113,8 @@ public:
                      name.c_str());
     }
 
-    Parameter(std::string name, ParameterType parameter_type, double default_value = 0.)
-      : name_(name), parameter_type_(parameter_type)
+    Parameter(std::string name, ParameterType parameter_type, ParameterMode mode, double default_value = 0.)
+      : name_(name), parameter_type_(parameter_type), mode_(mode)
     {
       if (parameter_type_ == ParameterType::Float)
         value_.f = default_value;
@@ -111,9 +123,9 @@ public:
                      name.c_str());
     }
 
-    Parameter(std::string name, ParameterType parameter_type, std::vector<std::string> enum_values,
+    Parameter(std::string name, ParameterType parameter_type, std::vector<std::string> enum_values, ParameterMode mode, 
               size_t default_option = 0)
-      : name_(name), parameter_type_(parameter_type), enum_values_(enum_values)
+      : name_(name), parameter_type_(parameter_type), mode_(mode), enum_values_(enum_values)
     {
       if (default_option < enum_values_.size())
         value_.e = default_option;
@@ -123,6 +135,7 @@ public:
   };
 
   rclcpp::Clock clock;
+  double reprojection_error;
   const std::size_t CAMERA_MATRIX_VECTOR_DIMENSION = 9;  // 3x3 camera intrinsic matrix
   const std::size_t CAMERA_MATRIX_WIDTH = 3;
   const std::size_t CAMERA_MATRIX_HEIGHT = 3;
@@ -444,6 +457,7 @@ protected:
   // K = [ 0 fy cy]
   //     [ 0  0  1]
   cv::Mat camera_matrix_;
+
 
   // Vector of distortion coefficients (k1, k2, t1, t2, k3)
   // Assume `plumb_bob` model

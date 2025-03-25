@@ -40,42 +40,109 @@ namespace moveit_handeye_calibration
 {
 HandEyeArucoTarget::HandEyeArucoTarget()
 {
-  parameters_.push_back(Parameter("markers, X", Parameter::ParameterType::Int, 3));
-  parameters_.push_back(Parameter("markers, Y", Parameter::ParameterType::Int, 4));
-  parameters_.push_back(Parameter("marker size (px)", Parameter::ParameterType::Int, 200));
-  parameters_.push_back(Parameter("marker separation (px)", Parameter::ParameterType::Int, 20));
-  parameters_.push_back(Parameter("marker border (bits)", Parameter::ParameterType::Int, 1));
+  parameters_.push_back(Parameter("markers, X", Parameter::ParameterType::Int, Parameter::ParameterMode::BOTH, 3));
+  parameters_.push_back(Parameter("markers, Y", Parameter::ParameterType::Int, Parameter::ParameterMode::BOTH, 4));
+  parameters_.push_back(Parameter("marker size (px)", Parameter::ParameterType::Int, Parameter::ParameterMode::CREATE_ONLY, 200));
+  parameters_.push_back(Parameter("marker separation (px)", Parameter::ParameterType::Int, Parameter::ParameterMode::CREATE_ONLY, 20));
+  parameters_.push_back(Parameter("marker border (bits)", Parameter::ParameterType::Int, Parameter::ParameterMode::CREATE_ONLY, 1));
   std::vector<std::string> dictionaries;
   for (const auto& kv : ARUCO_DICTIONARY)
   {
     dictionaries.push_back(kv.first);
   }
-  parameters_.push_back(Parameter("ArUco dictionary", Parameter::ParameterType::Enum, dictionaries, 1));
-  parameters_.push_back(Parameter("measured marker size (m)", Parameter::ParameterType::Float, 0.2));
-  parameters_.push_back(Parameter("measured separation (m)", Parameter::ParameterType::Float, 0.02));
+  parameters_.push_back(Parameter("ArUco dictionary", Parameter::ParameterType::Enum, dictionaries, Parameter::ParameterMode::BOTH, 1));
+  parameters_.push_back(Parameter("measured marker size (m)", Parameter::ParameterType::Float, Parameter::ParameterMode::BOTH, 0.2));
+  parameters_.push_back(Parameter("measured separation (m)", Parameter::ParameterType::Float, Parameter::ParameterMode::BOTH, 0.02));
+
+  parameters_.push_back(Parameter("use_existing_board", Parameter::ParameterType::Int, Parameter::ParameterMode::BOTH, 0));
 }
 
 bool HandEyeArucoTarget::initialize()
 {
   int markers_x;
   int markers_y;
-  int marker_size;
+  int marker_size_pixels;
   int separation;
-  int border_bits;
+  int border_size_bits;
   std::string dictionary_id;
-  float marker_measured_size;
-  float marker_measured_separation;
+  double marker_size_meters;
+  double square_size_meters;
+  double marker_measured_separation;
 
-  target_params_ready_ =
+  bool use_existing_board;
+  int use_existing_board_int = 0;
+
+  bool base_params_ready =
       getParameter("markers, X", markers_x) && getParameter("markers, Y", markers_y) &&
-      getParameter("marker size (px)", marker_size) && getParameter("marker separation (px)", separation) &&
-      getParameter("marker border (bits)", border_bits) && getParameter("ArUco dictionary", dictionary_id) &&
-      getParameter("measured marker size (m)", marker_measured_size) &&
-      getParameter("measured separation (m)", marker_measured_separation) &&
-      setTargetIntrinsicParams(markers_x, markers_y, marker_size, separation, border_bits, dictionary_id) &&
-      setTargetDimension(marker_measured_size, marker_measured_separation);
+      getParameter("marker size (px)", marker_size_pixels) && getParameter("marker separation (px)", separation) &&
+      getParameter("marker border (bits)", border_size_bits) && getParameter("ArUco dictionary", dictionary_id) &&
+      getParameter("measured marker size (m)", marker_size_meters) && getParameter("measured separation (m)", marker_measured_separation);
+      
+  // Get existing board parameters
+  bool existing_board_params_ready =
+        getParameter("markers, X", markers_x) && getParameter("markers, Y", markers_y) &&
+        getParameter("measured marker size (m)", marker_size_meters) && getParameter("measured separation (m)", marker_measured_separation) &&
+        getParameter("ArUco dictionary", dictionary_id) &&
+        getParameter("use_existing_board", use_existing_board_int);
+
+use_existing_board = (use_existing_board_int != 0);
+
+// Check if we should use the existing board parameters
+if (existing_board_params_ready && use_existing_board)
+{
+  // Use existing board parameters for initialization
+  target_params_ready_ = loadExistingCalibrationBoard(markers_x, markers_y, marker_size_meters, marker_measured_separation, dictionary_id);
+
+}
+else
+{
+  // Use standard board creation parameters
+  target_params_ready_ = base_params_ready &&
+                         setTargetIntrinsicParams(markers_x, markers_y, marker_size_pixels, separation,
+                                                  border_size_bits, dictionary_id) &&
+                         setTargetDimension(marker_size_meters, marker_measured_separation, markers_x, markers_y);
+}
 
   return target_params_ready_;
+}
+
+bool HandEyeArucoTarget::loadExistingCalibrationBoard(int markers_x, int markers_y, float marker_size_meters, float marker_separation_meters, std::string& dictionary_id)
+{
+  if (markers_x <= 0 || markers_y <= 0 || marker_size_meters <= 0 || marker_separation_meters <= 0 ||
+  0 == ARUCO_DICTIONARY.count(dictionary_id))
+  {
+  RCLCPP_ERROR_STREAM_THROTTLE(LOGGER_CALIBRATION_TARGET, clock, LOG_THROTTLE_PERIOD,
+                              "Invalid existing board parameters.\n"
+                              << "markers_x " << std::to_string(markers_x) << "\n"
+                              << "markers y " << std::to_string(markers_y) << "\n"
+                              << "marker_size_meters " << std::to_string(marker_size_meters) << "\n"
+                              << "marker_separation_meters " << std::to_string(marker_separation_meters) << "\n"
+                              << "dictionary_id " << dictionary_id << "\n");
+  return false;
+  }
+
+  std::lock_guard<std::mutex> aruco_lock(aruco_mutex_);
+
+  // Store dimensions directly
+  markers_x_ = markers_x;
+  markers_y_ = markers_y;
+
+  marker_size_meters_ = marker_size_meters;
+  marker_separation_meters_ = marker_separation_meters;
+
+  // Set the dictionary
+  const auto& it = ARUCO_DICTIONARY.find(dictionary_id);
+  dictionary_id_ = it->second;
+
+  RCLCPP_INFO_STREAM_THROTTLE(LOGGER_CALIBRATION_TARGET, clock, LOG_THROTTLE_PERIOD,
+                              "Loaded existing calibration board parameters: \n"
+                                  << "markers_x " << std::to_string(markers_x) << "\n"
+                                  << "markers_y " << std::to_string(markers_y) << "\n"
+                                  << "marker_size_meters " << std::to_string(marker_size_meters) << "\n"
+                                  << "marker_separation_meters " << std::to_string(marker_separation_meters) << "\n"
+                                  << "dictionary_id " << dictionary_id << "\n");
+
+  return true;
 }
 
 bool HandEyeArucoTarget::setTargetIntrinsicParams(int markers_x, int markers_y, int marker_size, int separation,
@@ -108,7 +175,8 @@ bool HandEyeArucoTarget::setTargetIntrinsicParams(int markers_x, int markers_y, 
   return true;
 }
 
-bool HandEyeArucoTarget::setTargetDimension(double marker_measured_size, double marker_measured_separation)
+bool HandEyeArucoTarget::setTargetDimension(double marker_measured_size, double marker_measured_separation,
+                                            int squares_x, int squares_y)
 {
   if (marker_measured_size <= 0 || marker_measured_separation <= 0)
   {
@@ -119,8 +187,8 @@ bool HandEyeArucoTarget::setTargetDimension(double marker_measured_size, double 
   }
 
   std::lock_guard<std::mutex> aruco_lock(aruco_mutex_);
-  marker_size_real_ = marker_measured_size;
-  marker_separation_real_ = marker_measured_separation;
+  marker_size_meters_ = marker_measured_size;
+  marker_separation_meters_ = marker_measured_separation;
   RCLCPP_INFO_STREAM_THROTTLE(LOGGER_CALIBRATION_TARGET, clock, LOG_THROTTLE_PERIOD,
                               "Set target real dimensions: \n"
                                   << "marker_measured_size " << std::to_string(marker_measured_size) << "\n"
@@ -163,7 +231,7 @@ bool HandEyeArucoTarget::detectTargetPose(cv::Mat& image)
     aruco_mutex_.lock();
     cv::Ptr<cv::aruco::Dictionary> dictionary = cv::aruco::getPredefinedDictionary(dictionary_id_);
     cv::Ptr<cv::aruco::GridBoard> board =
-        cv::aruco::GridBoard::create(markers_x_, markers_y_, marker_size_real_, marker_separation_real_, dictionary);
+        cv::aruco::GridBoard::create(markers_x_, markers_y_, marker_size_meters_, marker_separation_meters_, dictionary);
     aruco_mutex_.unlock();
     cv::Ptr<cv::aruco::DetectorParameters> params_ptr(new cv::aruco::DetectorParameters());
 #if CV_MAJOR_VERSION == 3 && CV_MINOR_VERSION == 2

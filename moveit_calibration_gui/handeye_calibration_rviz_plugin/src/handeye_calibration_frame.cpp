@@ -82,6 +82,8 @@ HandEyeCalibrationFrame::HandEyeCalibrationFrame(HandEyeCalibrationDisplay* pdis
   connect(tab_control_, SIGNAL(sensorPoseUpdate(double, double, double, double, double, double)), tab_context_,
           SLOT(updateCameraPose(double, double, double, double, double, double)));
 
+  connect(tab_target_, SIGNAL(errorValueUpdated(double)), tab_control_, SLOT(updateErrorValue(double)));
+
   tabs->addTab(tab_target_, "Target");
   tabs->addTab(tab_context_, "Context");
   tabs->addTab(tab_control_, "Calibrate");

@@ -60,18 +60,11 @@ protected:
   virtual bool setTargetIntrinsicParams(int markers_x, int markers_y, int marker_size, int separation, int border_bits,
                                         const std::string& dictionary_id);
 
-  virtual bool setTargetDimension(double marker_measured_size, double marker_measured_separation);
+  virtual bool setTargetDimension(double marker_measured_size, double marker_measured_separation, int squares_x, int squares_y);
+
+  bool loadExistingCalibrationBoard(int squares_x, int squares_y, float marker_size_meters, float marker_measured_separation, std::string& dictionary_id);
 
 private:
-  // Predefined ARUCO dictionaries in OpenCV for creating ARUCO marker board
-  const std::map<std::string, cv::aruco::PREDEFINED_DICTIONARY_NAME> ARUCO_DICTIONARY = {
-    { "DICT_4X4_250", cv::aruco::DICT_4X4_250 },
-    { "DICT_5X5_250", cv::aruco::DICT_5X5_250 },
-    { "DICT_6X6_250", cv::aruco::DICT_6X6_250 },
-    { "DICT_7X7_250", cv::aruco::DICT_7X7_250 },
-    { "DICT_ARUCO_ORIGINAL", cv::aruco::DICT_ARUCO_ORIGINAL }
-  };
-
   // Target intrinsic params
   int markers_x_;                                        // Number of markers along X axis
   int markers_y_;                                        // Number of markers along Y axis
@@ -81,8 +74,8 @@ private:
   cv::aruco::PREDEFINED_DICTIONARY_NAME dictionary_id_;  // Marker dictionary id
 
   // Target real dimensions in meters
-  double marker_size_real_;        // Printed marker size
-  double marker_separation_real_;  // Printed marker separation distance
+  double marker_size_meters_;        // Printed marker size
+  double marker_separation_meters_;  // Printed marker separation distance
 
   std::mutex aruco_mutex_;
 };

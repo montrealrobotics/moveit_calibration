@@ -51,6 +51,7 @@
 #include <QFormLayout>
 #include <QMessageBox>
 #include <QFileDialog>
+#include <QStackedWidget>
 
 // opencv
 #include <opencv2/aruco.hpp>
@@ -139,6 +140,13 @@ public:
 
   void cameraInfoCallback(sensor_msgs::msg::CameraInfo::ConstSharedPtr msg);
 private Q_SLOTS:
+  void boardTypeChanged(int index);
+
+  // Called when board mode selection changes
+  void boardModeChanged(int index);
+
+  // Helper to update the UI based on current selections
+  void updateParameterVisibility();
 
   // Called when the current item of target_type_ changed
   void targetTypeComboboxChanged(const QString& text);
@@ -152,14 +160,15 @@ private Q_SLOTS:
   // Called when the save_target_btn clicked
   void saveTargetImageBtnClicked(bool clicked);
 
-  // Called when the item of image_topic_field_ combobox is selected
-  void imageTopicComboboxChanged(const QString& topic);
+  void cameraTopicLineEditChanged();
 
 Q_SIGNALS:
 
   void cameraInfoChanged(sensor_msgs::msg::CameraInfo msg);
 
   void opticalFrameChanged(const std::string& frame_id);
+
+  void errorValueUpdated(double error);
 
 private:
   HandEyeCalibrationDisplay* calibration_display_;
@@ -168,9 +177,32 @@ private:
   // Qt components
   // **************************************************************
 
-  // Target params
+  // Board type and mode selection
   QFormLayout* target_param_layout_;
   QComboBox* target_type_;
+  QComboBox* board_type_selector_;
+  QComboBox* board_mode_selector_;
+  QStackedWidget* params_stack_;
+
+  // Parameter layouts for different combinations
+  QFormLayout* aruco_create_param_layout_;
+  QFormLayout* aruco_load_param_layout_;
+  QFormLayout* charuco_create_param_layout_;
+  QFormLayout* charuco_load_param_layout_;
+
+  // Parameters for existing boards (both ArUco and ChArUco)
+  QLineEdit* aruco_existing_squares_x_;
+  QLineEdit* aruco_existing_squares_y_;
+  QLineEdit* aruco_existing_marker_size_meters_;
+  QLineEdit* aruco_existing_dict_;
+
+  QLineEdit* charuco_existing_squares_x_;
+  QLineEdit* charuco_existing_squares_y_;
+  QLineEdit* charuco_existing_square_size_meters_;
+  QLineEdit* charuco_existing_marker_size_meters_;
+  QComboBox* charuco_existing_dictionary_;
+  QLineEdit* camera_topic_line_edit_;
+
   std::vector<moveit_handeye_calibration::HandEyeTargetBase::Parameter> target_plugin_params_;
   std::map<std::string, QWidget*> target_param_inputs_;
 
@@ -187,10 +219,12 @@ private:
   // **************************************************************
   // Variables
   // **************************************************************
-
   cv::Mat target_image_;
 
   std::string optical_frame_;
+  std::string plugin_name_;
+
+  double error_;
 
   sensor_msgs::msg::CameraInfo::ConstPtr camera_info_;
 

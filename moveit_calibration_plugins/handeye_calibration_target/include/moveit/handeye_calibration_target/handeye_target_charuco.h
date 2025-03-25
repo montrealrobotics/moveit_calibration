@@ -60,18 +60,12 @@ protected:
   virtual bool setTargetIntrinsicParams(int markers_x, int markers_y, int marker_size_pixels, int square_size_pixels,
                                         int border_size_bits, int margin_size_pixels, const std::string& dictionary_id);
 
-  virtual bool setTargetDimension(double board_size_meters, double marker_size_meters);
+  virtual bool setTargetDimension(double board_size_meters, double marker_size_meters, int squares_x, int squares_y);
+
+  bool loadExistingCalibrationBoard(int squares_x, int squares_y, float marker_size_meters, float square_size_meters,
+                                    std::string& dictionary_id);
 
 private:
-  // Predefined ARUCO dictionaries in OpenCV for creating CHARUCO marker board
-  const std::map<std::string, cv::aruco::PREDEFINED_DICTIONARY_NAME> ARUCO_DICTIONARY = {
-    { "DICT_4X4_250", cv::aruco::DICT_4X4_250 },
-    { "DICT_5X5_250", cv::aruco::DICT_5X5_250 },
-    { "DICT_6X6_250", cv::aruco::DICT_6X6_250 },
-    { "DICT_7X7_250", cv::aruco::DICT_7X7_250 },
-    { "DICT_ARUCO_ORIGINAL", cv::aruco::DICT_ARUCO_ORIGINAL }
-  };
-
   // Target intrinsic params
   int squares_x_;                                        // Number of squares along X axis
   int squares_y_;                                        // Number of squares along Y axis
@@ -84,6 +78,7 @@ private:
   // Target real dimensions in meters
   double board_size_meters_;   // Printed board size, longest dimension
   double marker_size_meters_;  // Printed marker size
+  double square_size_meters_;
 
   std::mutex charuco_mutex_;
 };

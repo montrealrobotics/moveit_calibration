@@ -90,6 +90,7 @@ private:
 
   rviz_visual_tools::TFVisualToolsPtr tf_tools_;
   rclcpp::Node::SharedPtr node_;
+  double error_value_;
 };
 
 }  // namespace moveit_rviz_plugin

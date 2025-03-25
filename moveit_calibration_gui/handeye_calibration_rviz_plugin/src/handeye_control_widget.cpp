@@ -140,6 +140,8 @@ ControlTabWidget::ControlTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibrat
   sample_layout->addWidget(sample_tree_view_);
   reprojection_error_label_ = new QLabel("Reprojection error: N/A");
   sample_layout->addWidget(reprojection_error_label_);
+  target_reprojection_error_label_ = new QLabel("Detection error, should be < 0.3: N/A");
+  sample_layout->addWidget(target_reprojection_error_label_);
 
   // Settings area
   QVBoxLayout* layout_right = new QVBoxLayout();
@@ -251,6 +253,14 @@ ControlTabWidget::ControlTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibrat
   // Set initial status
   calibration_display_->setStatus(rviz_common::properties::StatusProperty::Ok, "Calibration",
                                   "Collect 5 samples to start calibration.");
+}
+
+void ControlTabWidget::updateErrorValue(double error)
+{
+  std::ostringstream err_text;
+  err_text << std::fixed << std::setprecision(3);
+  err_text << "Detection error, should be < 0.3: \n" << error;
+  target_reprojection_error_label_->setText(QString(err_text.str().c_str()));
 }
 
 void ControlTabWidget::loadWidget(const rviz_common::Config& config)

@@ -166,6 +166,8 @@ public Q_SLOTS:
 
   void updateFrameNames(std::map<std::string, std::string> names);
 
+  void updateErrorValue(double error);
+
 private Q_SLOTS:
 
   void takeSampleBtnClicked(bool clicked);
@@ -211,6 +213,7 @@ private:
 
   QTreeView* sample_tree_view_;
   QLabel* reprojection_error_label_;
+  QLabel* target_reprojection_error_label_;
   QStandardItemModel* tree_view_model_;
 
   QComboBox* calibration_solver_;

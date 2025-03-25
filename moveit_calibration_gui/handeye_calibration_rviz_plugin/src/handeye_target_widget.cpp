@@ -38,49 +38,12 @@
 
 namespace moveit_rviz_plugin
 {
-void RosTopicComboBox::addMsgsFilterType(QString msgs_type)
-{
-  message_types_.insert(msgs_type);
-}
-
-bool RosTopicComboBox::hasTopic(const QString& topic_name)
-{
-  getFilteredTopics();
-  return image_topics_.contains(topic_name);
-}
-
-bool RosTopicComboBox::getFilteredTopics()
-{
-  // Get all topic names
-  std::map<std::string, std::vector<std::string>> topic_names_and_types = node_->get_topic_names_and_types();
-  image_topics_.clear();
-  // Filter out the topic names with specific topic type
-  for (const auto& topic_info : topic_names_and_types)
-  {
-    std::for_each(topic_info.second.begin(), topic_info.second.end(), [&](std::string topic_type) {
-      if (message_types_.contains(QString(topic_type.c_str())))
-      {
-        image_topics_.insert(QString(topic_info.first.c_str()));
-      }
-    });
-  }
-
-  clear();
-  addItem(QString(""));
-  for (const QString& topic : image_topics_)
-  {
-    addItem(topic);
-  }
-
-  return !image_topics_.isEmpty();
-}
-
 void RosTopicComboBox::mousePressEvent(QMouseEvent* event)
 {
   getFilteredTopics();
   showPopup();
 }
-
+  
 TargetTabWidget::TargetTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibrationDisplay* pdisplay, QWidget* parent)
   : QWidget(parent)
   , node_(node)
@@ -96,16 +59,51 @@ TargetTabWidget::TargetTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibratio
   this->setLayout(layout);
   QVBoxLayout* layout_left = new QVBoxLayout();
   layout->addLayout(layout_left);
+  plugin_name_ = "HandEyeTarget/Aruco";
 
-  // Target creation area
-  QGroupBox* group_left_top = new QGroupBox("Target Params", this);
+  // Board type and mode selection area
+  QGroupBox* selection_group = new QGroupBox("Board Configuration", this);
+  layout_left->addWidget(selection_group);
+  QFormLayout* selection_layout = new QFormLayout();
+  selection_group->setLayout(selection_layout);
 
-  layout_left->addWidget(group_left_top);
-  group_left_top->setLayout(target_param_layout_);
+  // Board type selector (ArUco vs ChArUco)
+  board_type_selector_ = new QComboBox();
+  board_type_selector_->addItem("ArUco Board");
+  board_type_selector_->addItem("ChArUco Board");
+  connect(board_type_selector_, SIGNAL(currentIndexChanged(int)), this, SLOT(boardTypeChanged(int)));
+  selection_layout->addRow("Board Type", board_type_selector_);
 
-  target_type_ = new QComboBox();
-  connect(target_type_, SIGNAL(activated(const QString&)), this, SLOT(targetTypeComboboxChanged(const QString&)));
-  target_param_layout_->addRow("Target Type", target_type_);
+  // Board mode selector (Create vs Load)
+  board_mode_selector_ = new QComboBox();
+  board_mode_selector_->addItem("Create New Board");
+  board_mode_selector_->addItem("Load Existing Board");
+  connect(board_mode_selector_, SIGNAL(currentIndexChanged(int)), this, SLOT(boardModeChanged(int)));
+  selection_layout->addRow("Mode", board_mode_selector_);
+
+  // Create stacked widget for parameters
+  params_stack_ = new QStackedWidget();
+  layout_left->addWidget(params_stack_);
+
+  QWidget* aruco_create_widget = new QWidget();
+  aruco_create_param_layout_ = new QFormLayout();
+  aruco_create_widget->setLayout(aruco_create_param_layout_);
+  params_stack_->addWidget(aruco_create_widget);
+
+  QWidget* aruco_load_widget = new QWidget();
+  aruco_load_param_layout_ = new QFormLayout();
+  aruco_load_widget->setLayout(aruco_load_param_layout_);
+  params_stack_->addWidget(aruco_load_widget);
+
+  QWidget* charuco_create_widget = new QWidget();
+  charuco_create_param_layout_ = new QFormLayout();
+  charuco_create_widget->setLayout(charuco_create_param_layout_);
+  params_stack_->addWidget(charuco_create_widget);
+
+  QWidget* charuco_load_widget = new QWidget();
+  charuco_load_param_layout_ = new QFormLayout();
+  charuco_load_widget->setLayout(charuco_load_param_layout_);
+  params_stack_->addWidget(charuco_load_widget);
 
   // Target 3D pose recognition area
   QGroupBox* group_left_bottom = new QGroupBox("Target Pose Detection", this);
@@ -113,11 +111,11 @@ TargetTabWidget::TargetTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibratio
   QFormLayout* layout_left_bottom = new QFormLayout();
   group_left_bottom->setLayout(layout_left_bottom);
 
-  ros_topics_.insert(std::make_pair("image_topic", new RosTopicComboBox(node_, this)));
-  ros_topics_["image_topic"]->addMsgsFilterType("sensor_msgs/msg/Image");
-  layout_left_bottom->addRow("Camera Image Topic", ros_topics_["image_topic"]);
-  connect(ros_topics_["image_topic"], SIGNAL(activated(const QString&)), this,
-          SLOT(imageTopicComboboxChanged(const QString&)));
+  camera_topic_line_edit_ = new QLineEdit(this);
+  layout_left_bottom->addRow("Camera Image Topic", camera_topic_line_edit_);
+
+  // Connect the editingFinished signal (fires when user presses Enter or focus leaves):
+  connect(camera_topic_line_edit_, &QLineEdit::editingFinished, this, &TargetTabWidget::cameraTopicLineEditChanged);
 
   // Target image display, create and save area
   QGroupBox* group_right = new QGroupBox("Target", this);
@@ -130,15 +128,14 @@ TargetTabWidget::TargetTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibratio
   target_display_label_->setAlignment(Qt::AlignHCenter);
   layout_right->addWidget(target_display_label_);
 
-  QPushButton* create_target_btn = new QPushButton("Create Target");
-  layout_right->addWidget(create_target_btn);
-  connect(create_target_btn, SIGNAL(clicked(bool)), this, SLOT(createTargetImageBtnClicked(bool)));
+  create_target_btn_ = new QPushButton("Create Target");
+  layout_right->addWidget(create_target_btn_);
+  connect(create_target_btn_, SIGNAL(clicked(bool)), this, SLOT(createTargetImageBtnClicked(bool)));
 
-  QPushButton* save_target_btn = new QPushButton("Save Target");
-  layout_right->addWidget(save_target_btn);
-  connect(save_target_btn, SIGNAL(clicked(bool)), this, SLOT(saveTargetImageBtnClicked(bool)));
+  save_target_btn_ = new QPushButton("Save Target");
+  layout_right->addWidget(save_target_btn_);
+  connect(save_target_btn_, SIGNAL(clicked(bool)), this, SLOT(saveTargetImageBtnClicked(bool)));
 
-  // Load available target plugins
   loadAvailableTargetPlugins();
 
   // Initialize image publisher
@@ -153,23 +150,115 @@ TargetTabWidget::TargetTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibratio
                                      "Not subscribed to image topic.");
 }
 
+void TargetTabWidget::boardTypeChanged(int index)
+{
+  // print to terminal that this function was called
+  if (index == 0)
+  {
+    plugin_name_ = "HandEyeTarget/Aruco";
+  }
+  else
+  {
+    plugin_name_ = "HandEyeTarget/Charuco";
+  }
+
+  loadInputWidgetsForTargetType(plugin_name_);
+  updateParameterVisibility();
+}
+
+void TargetTabWidget::boardModeChanged(int index)
+{
+
+  // Update button labels based on the mode
+  if (index == 0)
+  {  // Create New Board
+    create_target_btn_->setText("Create Target");
+    save_target_btn_->setEnabled(true);
+  }
+  else
+  {  // Load Existing Board
+    create_target_btn_->setText("Load Existing Board");
+    save_target_btn_->setEnabled(false);
+  }
+  loadInputWidgetsForTargetType(plugin_name_);
+  updateParameterVisibility();
+}
+
+void TargetTabWidget::updateParameterVisibility()
+{
+  int board_type = board_type_selector_->currentIndex();
+  int board_mode = board_mode_selector_->currentIndex();
+
+  // Calculate which parameter page to show (0-3)
+  int page_index = board_type * 2 + board_mode;
+  params_stack_->setCurrentIndex(page_index);
+}
+
+void TargetTabWidget::saveWidget(rviz_common::Config& config)
+{
+  // Save the selections
+  config.mapSetValue("board_type_index", board_type_selector_->currentIndex());
+  config.mapSetValue("board_mode_index", board_mode_selector_->currentIndex());
+
+  // Save parameter inputs for ArUco create mode
+  for (const moveit_handeye_calibration::HandEyeTargetBase::Parameter& param : target_plugin_params_)
+  {
+    switch (param.parameter_type_)
+    {
+      case moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterType::Int:
+        config.mapSetValue(param.name_.c_str(), static_cast<QLineEdit*>(target_param_inputs_[param.name_])->text());
+        break;
+      case moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterType::Float:
+        config.mapSetValue(param.name_.c_str(), static_cast<QLineEdit*>(target_param_inputs_[param.name_])->text());
+        break;
+      case moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterType::Enum:
+        config.mapSetValue(param.name_.c_str(),
+                           static_cast<QComboBox*>(target_param_inputs_[param.name_])->currentText());
+        break;
+    }
+  }
+}
+
 void TargetTabWidget::loadWidget(const rviz_common::Config& config)
 {
-  if (target_type_->count() > 0)
+  // Load the selections
+  int board_type_index = 0;
+  int board_mode_index = 0;
+
+  if (config.mapGetInt("board_type_index", &board_type_index))
   {
-    QString type;
-    if (config.mapGetString("target_type", &type) && target_type_->findText(type, Qt::MatchCaseSensitive) != -1)
-    {
-      target_type_->setCurrentText(type);
-      targetTypeComboboxChanged(type);
-    }
+    board_type_selector_->setCurrentIndex(board_type_index);
+  }
+
+  if (config.mapGetInt("board_mode_index", &board_mode_index))
+  {
+    board_mode_selector_->setCurrentIndex(board_mode_index);
+  }
+
+  moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterMode mode_switch =
+      moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterMode::BOTH;
+
+  // Load parameters based on the selected mode
+  if (board_mode_index == 0)
+  {
+    mode_switch = moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterMode::LOAD_ONLY;
+  }
+  else
+  {
+    mode_switch = moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterMode::CREATE_ONLY;
   }
 
   int param_int;
   float param_float;
   QString param_enum;
+
   for (const moveit_handeye_calibration::HandEyeTargetBase::Parameter& param : target_plugin_params_)
   {
+    if (param.mode_ == mode_switch)
+    {
+      // skip this parameter
+      continue;
+    }
     switch (param.parameter_type_)
     {
       case moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterType::Int:
@@ -190,55 +279,16 @@ void TargetTabWidget::loadWidget(const rviz_common::Config& config)
     }
   }
 
-  for (const std::pair<const std::string, RosTopicComboBox*>& topic : ros_topics_)
+  QString camera_topic;
+  if (config.mapGetString("camera_topic_line_edit", &camera_topic))
   {
-    QString topic_name;
-    if (config.mapGetString(topic.first.c_str(), &topic_name))
-    {
-      if (topic.second->hasTopic(topic_name))
-      {
-        topic.second->setCurrentText(topic_name);
-        try
-        {
-          if (!topic.first.compare("image_topic"))
-          {
-            camera_sub_.shutdown();
-            camera_sub_ = it_.subscribeCamera(topic_name.toStdString(), 1, &TargetTabWidget::cameraCallback, this);
-          }
-        }
-        catch (const image_transport::TransportLoadException& e)
-        {
-          RCLCPP_ERROR_STREAM(node_->get_logger(),
-                              "Subscribe to " << topic_name.toStdString() << " fail: " << e.what());
-        }
-      }
-    }
-  }
-}
-
-void TargetTabWidget::saveWidget(rviz_common::Config& config)
-{
-  config.mapSetValue("target_type", target_type_->currentText());
-
-  QString param_value;
-  for (const moveit_handeye_calibration::HandEyeTargetBase::Parameter& param : target_plugin_params_)
-  {
-    switch (param.parameter_type_)
-    {
-      case moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterType::Int:
-      case moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterType::Float:
-        param_value = static_cast<QLineEdit*>(target_param_inputs_[param.name_])->text();
-        config.mapSetValue(param.name_.c_str(), param_value);
-        break;
-      case moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterType::Enum:
-        param_value = static_cast<QComboBox*>(target_param_inputs_[param.name_])->currentText();
-        config.mapSetValue(param.name_.c_str(), param_value);
-        break;
-    }
+    camera_topic_line_edit_->setText(camera_topic);
+    // Optionally auto-subscribe immediately if desired:
+    cameraTopicLineEditChanged();
   }
 
-  for (const std::pair<const std::string, RosTopicComboBox*>& topic : ros_topics_)
-    config.mapSetValue(topic.first.c_str(), topic.second->currentText());
+  updateParameterVisibility();
+  boardTypeChanged(board_type_selector_->currentIndex());
 }
 
 bool TargetTabWidget::loadAvailableTargetPlugins()
@@ -257,64 +307,130 @@ bool TargetTabWidget::loadAvailableTargetPlugins()
     }
   }
 
-  // Get target classes
-  const std::vector<std::string>& classes = target_plugins_loader_->getDeclaredClasses();
-
-  target_type_->clear();
-  if (classes.empty())
-  {
-    QMessageBox::warning(this, tr("Missing target plugins"), "No MoveIt handeye calibration target plugin found.");
-    return false;
-  }
-
-  for (const std::string& it : classes)
-    target_type_->addItem(tr(it.c_str()));
-  loadInputWidgetsForTargetType(classes[0]);
-
   return true;
 }
 
 bool TargetTabWidget::loadInputWidgetsForTargetType(const std::string& plugin_name)
 {
   if (plugin_name.empty())
+  {
+    // PRINT message to say reached this, print to terminal
+    RCLCPP_ERROR_STREAM(node_->get_logger(), "Plugin name is empty");
     return false;
+  }
 
   try
   {
+    const std::vector<std::string>& classes = target_plugins_loader_->getDeclaredClasses();
     target_ = target_plugins_loader_->createUniqueInstance(plugin_name);
     target_plugin_params_ = target_->getParameters();
     target_param_inputs_.clear();
-    // clear out layout, except target type
-    while (target_param_layout_->rowCount() > 1)
+
+    // Determine which layout to use based on board type
+    QFormLayout* create_layout;
+    QFormLayout* load_layout;
+    if (board_mode_selector_->currentIndex() == 0)
     {
-      target_param_layout_->removeRow(1);
-    }
-    for (const auto& param : target_plugin_params_)
-    {
-      switch (param.parameter_type_)
+      if (board_type_selector_->currentIndex() == 0)
+      {  // ArUco
+        create_layout = aruco_create_param_layout_;
+      }
+      else
+      {  // ChArUco
+        create_layout = charuco_create_param_layout_;
+      }
+      // Clear the layout
+      while (create_layout->rowCount() > 0)
       {
-        case moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterType::Int:
-          target_param_inputs_.insert(std::make_pair(param.name_, new QLineEdit()));
-          target_param_layout_->addRow(param.name_.c_str(), target_param_inputs_[param.name_]);
-          static_cast<QLineEdit*>(target_param_inputs_[param.name_])->setText(std::to_string(param.value_.i).c_str());
-          break;
-        case moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterType::Float:
-          target_param_inputs_.insert(std::make_pair(param.name_, new QLineEdit()));
-          target_param_layout_->addRow(param.name_.c_str(), target_param_inputs_[param.name_]);
-          static_cast<QLineEdit*>(target_param_inputs_[param.name_])->setText(std::to_string(param.value_.f).c_str());
-          break;
-        case moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterType::Enum:
-          QComboBox* combo_box = new QComboBox();
-          for (const std::string& value : param.enum_values_)
-          {
-            combo_box->addItem(tr(value.c_str()));
-          }
-          target_param_inputs_.insert(std::make_pair(param.name_, combo_box));
-          target_param_layout_->addRow(param.name_.c_str(), target_param_inputs_[param.name_]);
-          static_cast<QComboBox*>(target_param_inputs_[param.name_])->setCurrentIndex(param.value_.e);
-          break;
+        create_layout->removeRow(0);
+      }
+      // Add parameter widgets
+      for (const auto& param : target_plugin_params_)
+      {
+        // print to terminal the mode type
+        if (param.mode_ == moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterMode::LOAD_ONLY || param.name_ == "use_existing_board")
+        {
+          // skip this parameter
+          continue;
+        }
+        switch (param.parameter_type_)
+        {
+          case moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterType::Int:
+            target_param_inputs_.insert(std::make_pair(param.name_, new QLineEdit()));
+            create_layout->addRow(param.name_.c_str(), target_param_inputs_[param.name_]);
+            static_cast<QLineEdit*>(target_param_inputs_[param.name_])->setText(std::to_string(param.value_.i).c_str());
+            break;
+          case moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterType::Float:
+            target_param_inputs_.insert(std::make_pair(param.name_, new QLineEdit()));
+            create_layout->addRow(param.name_.c_str(), target_param_inputs_[param.name_]);
+            static_cast<QLineEdit*>(target_param_inputs_[param.name_])->setText(std::to_string(param.value_.f).c_str());
+            break;
+          case moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterType::Enum:
+            QComboBox* combo_box = new QComboBox();
+            for (const std::string& value : param.enum_values_)
+            {
+              combo_box->addItem(tr(value.c_str()));
+            }
+            target_param_inputs_.insert(std::make_pair(param.name_, combo_box));
+            create_layout->addRow(param.name_.c_str(), target_param_inputs_[param.name_]);
+            static_cast<QComboBox*>(target_param_inputs_[param.name_])->setCurrentIndex(param.value_.e);
+            break;
+        }
       }
     }
+    else
+    {
+      if (board_type_selector_->currentIndex() == 1)
+      {
+        load_layout = charuco_load_param_layout_;
+      }
+      else
+      {
+        load_layout = aruco_load_param_layout_;
+      }
+      // Clear the layout
+      while (load_layout->rowCount() > 0)
+      {
+        load_layout->removeRow(0);
+      }
+
+      // Add parameter widgets
+      for (const auto& param : target_plugin_params_)
+      {
+        // print to terminal the mode type
+        if (param.mode_ == moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterMode::CREATE_ONLY || param.name_ == "use_existing_board")
+        {
+          // skip this parameter
+          continue;
+        }
+        switch (param.parameter_type_)
+        {
+          case moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterType::Int:
+            target_param_inputs_.insert(std::make_pair(param.name_, new QLineEdit()));
+            load_layout->addRow(param.name_.c_str(), target_param_inputs_[param.name_]);
+            static_cast<QLineEdit*>(target_param_inputs_[param.name_])->setText(std::to_string(param.value_.i).c_str());
+            break;
+          case moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterType::Float:
+            target_param_inputs_.insert(std::make_pair(param.name_, new QLineEdit()));
+            load_layout->addRow(param.name_.c_str(), target_param_inputs_[param.name_]);
+            static_cast<QLineEdit*>(target_param_inputs_[param.name_])->setText(std::to_string(param.value_.f).c_str());
+            break;
+          case moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterType::Enum:
+            QComboBox* combo_box = new QComboBox();
+            for (const std::string& value : param.enum_values_)
+            {
+              combo_box->addItem(tr(value.c_str()));
+            }
+            target_param_inputs_.insert(std::make_pair(param.name_, combo_box));
+            load_layout->addRow(param.name_.c_str(), target_param_inputs_[param.name_]);
+            static_cast<QComboBox*>(target_param_inputs_[param.name_])->setCurrentIndex(param.value_.e);
+            break;
+        }
+      }
+    }
+
+    // Update UI to match current selections
+    updateParameterVisibility();
   }
   catch (pluginlib::PluginlibException& ex)
   {
@@ -332,18 +448,24 @@ bool TargetTabWidget::createTargetInstance()
 
   try
   {
-    // TODO: load parameters from GUI
+    //print to terminal that this function was called
+    int board_mode = board_mode_selector_->currentIndex();
+    int value = 0;
+    float value_f = 0.0;
     for (const auto& param : target_plugin_params_)
     {
+      if (param.name_ == "use_existing_board" || (param.mode_ != board_mode  && param.mode_ != moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterMode::BOTH))
+        continue;
+
       switch (param.parameter_type_)
       {
         case moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterType::Int:
-          target_->setParameter(param.name_,
-                                static_cast<QLineEdit*>(target_param_inputs_[param.name_])->text().toInt());
+          value = static_cast<QLineEdit*>(target_param_inputs_[param.name_])->text().toInt();
+          target_->setParameter(param.name_, value);
           break;
         case moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterType::Float:
-          target_->setParameter(param.name_,
-                                static_cast<QLineEdit*>(target_param_inputs_[param.name_])->text().toFloat());
+          value_f = static_cast<QLineEdit*>(target_param_inputs_[param.name_])->text().toFloat();
+          target_->setParameter(param.name_, value_f);
           break;
         case moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterType::Enum:
           target_->setParameter(
@@ -351,16 +473,53 @@ bool TargetTabWidget::createTargetInstance()
           break;
       }
     }
+    if (board_mode == 0)
+    {
+      target_->setParameter("use_existing_board", 0);
+    }
+    else
+    {
+      target_->setParameter("use_existing_board", 1);
+    }
     target_->initialize();
   }
   catch (pluginlib::PluginlibException& ex)
   {
-    QMessageBox::warning(this, tr("Exception while loading a handeye target plugin"), tr(ex.what()));
+    QMessageBox::warning(this, tr("Exception while initializing plugin"), tr(ex.what()));
     target_ = nullptr;
     return false;
   }
 
   return true;
+}
+
+void TargetTabWidget::cameraTopicLineEditChanged()
+{
+  // Shutdown the old subscription, if any
+  camera_sub_.shutdown();
+
+  // Clear the status
+  calibration_display_->setStatusStd(rviz_common::properties::StatusProperty::Warn, "Target detection",
+                                     "Not subscribed to image topic.");
+
+  // Get whatever user typed
+  QString topic = camera_topic_line_edit_->text();
+
+  // If not empty, try to subscribe
+  if (!topic.isEmpty())
+  {
+    try
+    {
+      camera_sub_ = it_.subscribeCamera(topic.toStdString(), 1, &TargetTabWidget::cameraCallback, this);
+    }
+    catch (image_transport::TransportLoadException& e)
+    {
+      RCLCPP_ERROR_STREAM(node_->get_logger(),
+                          "Subscribe to image topic: " << topic.toStdString() << " failed. " << e.what());
+      calibration_display_->setStatusStd(rviz_common::properties::StatusProperty::Error, "Target detection",
+                                         "Failed to subscribe to image topic.");
+    }
+  }
 }
 
 void TargetTabWidget::cameraCallback(const sensor_msgs::msg::Image::ConstSharedPtr& image,
@@ -372,7 +531,7 @@ void TargetTabWidget::cameraCallback(const sensor_msgs::msg::Image::ConstSharedP
 
 void TargetTabWidget::imageCallback(const sensor_msgs::msg::Image::ConstSharedPtr& msg)
 {
-  createTargetInstance();
+  //createTargetInstance();
 
   // Depth image format `16UC1` cannot be converted to `MONO8`
   if (msg->encoding == "16UC1")
@@ -416,6 +575,9 @@ void TargetTabWidget::imageCallback(const sensor_msgs::msg::Image::ConstSharedPt
     if (target_ && target_->detectTargetPose(cv_ptr->image))
     {
       pub_msg = cv_bridge::CvImage(std_msgs::msg::Header(), "rgb8", cv_ptr->image).toImageMsg();
+
+      error_ = target_->reprojection_error;
+      Q_EMIT errorValueUpdated(error_);
 
       geometry_msgs::msg::TransformStamped tf2_msg = target_->getTransformStamped(optical_frame_);
       tf_pub_->sendTransform(tf2_msg);
@@ -491,22 +653,26 @@ void TargetTabWidget::targetTypeComboboxChanged(const QString& text)
 void TargetTabWidget::createTargetImageBtnClicked(bool clicked)
 {
   createTargetInstance();
-  if (target_)
+  // if board mode is 0
+  if (board_mode_selector_->currentIndex() == 0)
   {
-    target_->createTargetImage(target_image_);
-  }
-  else
-    QMessageBox::warning(this, tr("Fail to create a target image."), "No available target plugin.");
-
-  if (!target_image_.empty())
-  {
-    // Show target image
-    QImage qimage(target_image_.data, target_image_.cols, target_image_.rows, QImage::Format_Grayscale8);
-    if (target_image_.cols > target_image_.rows)
-      qimage = qimage.scaledToWidth(320, Qt::SmoothTransformation);
+    if (target_)
+    {
+      target_->createTargetImage(target_image_);
+    }
     else
-      qimage = qimage.scaledToHeight(260, Qt::SmoothTransformation);
-    target_display_label_->setPixmap(QPixmap::fromImage(qimage));
+      QMessageBox::warning(this, tr("Fail to create a target image."), "No available target plugin.");
+
+    if (!target_image_.empty())
+    {
+      // Show target image
+      QImage qimage(target_image_.data, target_image_.cols, target_image_.rows, QImage::Format_Grayscale8);
+      if (target_image_.cols > target_image_.rows)
+        qimage = qimage.scaledToWidth(320, Qt::SmoothTransformation);
+      else
+        qimage = qimage.scaledToHeight(260, Qt::SmoothTransformation);
+      target_display_label_->setPixmap(QPixmap::fromImage(qimage));
+    }
   }
 }
 
@@ -538,28 +704,6 @@ void TargetTabWidget::saveTargetImageBtnClicked(bool clicked)
 
   if (!cv::imwrite(cv::String(fileName.toStdString()), target_image_))
     RCLCPP_ERROR_STREAM(node_->get_logger(), "Error OpenCV saving image.");
-}
-
-void TargetTabWidget::imageTopicComboboxChanged(const QString& topic)
-{
-  camera_sub_.shutdown();
-
-  calibration_display_->setStatusStd(rviz_common::properties::StatusProperty::Warn, "Target detection",
-                                     "Not subscribed to image topic.");
-  if (!topic.isNull() and !topic.isEmpty())
-  {
-    try
-    {
-      camera_sub_ = it_.subscribeCamera(topic.toStdString(), 1, &TargetTabWidget::cameraCallback, this);
-    }
-    catch (image_transport::TransportLoadException& e)
-    {
-      RCLCPP_ERROR_STREAM(node_->get_logger(),
-                          "Subscribe to image topic: " << topic.toStdString() << " failed. " << e.what());
-      calibration_display_->setStatusStd(rviz_common::properties::StatusProperty::Error, "Target detection",
-                                         "Failed to subscribe to image topic.");
-    }
-  }
 }
 
 }  // namespace moveit_rviz_plugin
