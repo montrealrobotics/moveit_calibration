@@ -15,8 +15,7 @@ repository. For background, see this [Github discussion](https://github.com/ros-
 ```sh
 mkdir -p ws_moveit/src
 cd ws_moveit
-git clone https://github.com/ros-planning/moveit_calibration.git -b ros2 src/moveit_calibration
-vcs import src < src/moveit_calibration/moveit_calibration.repos --skip-existing
+git clone https://github.com/montrealrobotics/moveit_calibration.git src/moveit_calibration
 rosdep install -r --from-paths src --ignore-src --rosdistro ${ROS_DISTRO} -y
 colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release
 ```
