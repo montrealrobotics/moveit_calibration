@@ -48,8 +48,8 @@ const rclcpp::Logger LOGGER_CALIBRATION_SOLVER = rclcpp::get_logger("moveit_hand
 
 enum SensorMountType
 {
-  EYE_TO_HAND = 0,
-  EYE_IN_HAND = 1,
+  EYE_IN_HAND = 0,
+  EYE_TO_HAND = 1,
 };
 class HandEyeSolverBase
 {
@@ -72,13 +72,13 @@ public:
    * the world (or robot base).
    * @param object_wrt_sensor Object (calibration board) pose (4X4 transform)
    * with respect to the camera.
-   * @param setup Camera mount type, {EYE_TO_HAND, EYE_IN_HAND}.
+   * @param setup Camera mount type, {EYE_IN_HAND, EYE_TO_HAND}.
    * @param solver_name The algorithm used in the calculation.
    * @param[out] error_message Description of error, if solver fails
    * @return If the calculation succeeds, return true. Otherwise, return false.
    */
   virtual bool solve(const std::vector<Eigen::Isometry3d>& effector_wrt_world,
-                     const std::vector<Eigen::Isometry3d>& object_wrt_sensor, SensorMountType setup = EYE_TO_HAND,
+                     const std::vector<Eigen::Isometry3d>& object_wrt_sensor, SensorMountType setup = EYE_IN_HAND,
                      const std::string& solver_name = "", std::string* error_message = nullptr) = 0;
 
   /**
@@ -95,12 +95,12 @@ public:
    * @param object_wrt_sensor Object (calibration board) pose (4X4 transform)
    * with respect to the camera.
    * @param X The calibration, as a 4X4 transform.
-   * @param setup Camera mount type, {EYE_TO_HAND, EYE_IN_HAND}.
+   * @param setup Camera mount type, {EYE_IN_HAND, EYE_TO_HAND}.
    * @return Pair of translation and rotation reprojection error in meters and radians, or NaNs on error.
    */
   std::pair<double, double> getReprojectionError(const std::vector<Eigen::Isometry3d>& effector_wrt_world,
                                                  const std::vector<Eigen::Isometry3d>& object_wrt_sensor,
-                                                 const Eigen::Isometry3d& X, SensorMountType setup = EYE_TO_HAND)
+                                                 const Eigen::Isometry3d& X, SensorMountType setup = EYE_IN_HAND)
   {
     auto ret = std::make_pair(std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN());
     if (effector_wrt_world.size() != object_wrt_sensor.size())

@@ -88,8 +88,8 @@ public:
 
     const std::vector<std::string> enum_values_;
     const enum ParameterMode {
-      CREATE_ONLY,
       LOAD_ONLY,
+      CREATE_ONLY,
       BOTH
     } mode_;
 

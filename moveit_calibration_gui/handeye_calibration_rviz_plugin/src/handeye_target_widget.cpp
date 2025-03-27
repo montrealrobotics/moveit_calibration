@@ -59,7 +59,7 @@ TargetTabWidget::TargetTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibratio
   this->setLayout(layout);
   QVBoxLayout* layout_left = new QVBoxLayout();
   layout->addLayout(layout_left);
-  plugin_name_ = "HandEyeTarget/Aruco";
+  plugin_name_ = "HandEyeTarget/Charuco";
 
   // Board type and mode selection area
   QGroupBox* selection_group = new QGroupBox("Board Configuration", this);
@@ -69,15 +69,15 @@ TargetTabWidget::TargetTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibratio
 
   // Board type selector (ArUco vs ChArUco)
   board_type_selector_ = new QComboBox();
-  board_type_selector_->addItem("ArUco Board");
   board_type_selector_->addItem("ChArUco Board");
+  board_type_selector_->addItem("ArUco Board");
   connect(board_type_selector_, SIGNAL(currentIndexChanged(int)), this, SLOT(boardTypeChanged(int)));
   selection_layout->addRow("Board Type", board_type_selector_);
 
   // Board mode selector (Create vs Load)
   board_mode_selector_ = new QComboBox();
-  board_mode_selector_->addItem("Create New Board");
   board_mode_selector_->addItem("Load Existing Board");
+  board_mode_selector_->addItem("Create New Board");
   connect(board_mode_selector_, SIGNAL(currentIndexChanged(int)), this, SLOT(boardModeChanged(int)));
   selection_layout->addRow("Mode", board_mode_selector_);
 
@@ -85,25 +85,25 @@ TargetTabWidget::TargetTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibratio
   params_stack_ = new QStackedWidget();
   layout_left->addWidget(params_stack_);
 
-  QWidget* aruco_create_widget = new QWidget();
-  aruco_create_param_layout_ = new QFormLayout();
-  aruco_create_widget->setLayout(aruco_create_param_layout_);
-  params_stack_->addWidget(aruco_create_widget);
-
-  QWidget* aruco_load_widget = new QWidget();
-  aruco_load_param_layout_ = new QFormLayout();
-  aruco_load_widget->setLayout(aruco_load_param_layout_);
-  params_stack_->addWidget(aruco_load_widget);
+  QWidget* charuco_load_widget = new QWidget();
+  charuco_load_param_layout_ = new QFormLayout();
+  charuco_load_widget->setLayout(charuco_load_param_layout_);
+  params_stack_->addWidget(charuco_load_widget);
 
   QWidget* charuco_create_widget = new QWidget();
   charuco_create_param_layout_ = new QFormLayout();
   charuco_create_widget->setLayout(charuco_create_param_layout_);
   params_stack_->addWidget(charuco_create_widget);
 
-  QWidget* charuco_load_widget = new QWidget();
-  charuco_load_param_layout_ = new QFormLayout();
-  charuco_load_widget->setLayout(charuco_load_param_layout_);
-  params_stack_->addWidget(charuco_load_widget);
+  QWidget* aruco_load_widget = new QWidget();
+  aruco_load_param_layout_ = new QFormLayout();
+  aruco_load_widget->setLayout(aruco_load_param_layout_);
+  params_stack_->addWidget(aruco_load_widget);
+
+  QWidget* aruco_create_widget = new QWidget();
+  aruco_create_param_layout_ = new QFormLayout();
+  aruco_create_widget->setLayout(aruco_create_param_layout_);
+  params_stack_->addWidget(aruco_create_widget);
 
   // Target 3D pose recognition area
   QGroupBox* group_left_bottom = new QGroupBox("Target Pose Detection", this);
@@ -128,12 +128,13 @@ TargetTabWidget::TargetTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibratio
   target_display_label_->setAlignment(Qt::AlignHCenter);
   layout_right->addWidget(target_display_label_);
 
-  create_target_btn_ = new QPushButton("Create Target");
+  create_target_btn_ = new QPushButton("Load Existing Board");
   layout_right->addWidget(create_target_btn_);
   connect(create_target_btn_, SIGNAL(clicked(bool)), this, SLOT(createTargetImageBtnClicked(bool)));
 
   save_target_btn_ = new QPushButton("Save Target");
   layout_right->addWidget(save_target_btn_);
+  save_target_btn_->setEnabled(false);
   connect(save_target_btn_, SIGNAL(clicked(bool)), this, SLOT(saveTargetImageBtnClicked(bool)));
 
   loadAvailableTargetPlugins();
@@ -152,14 +153,13 @@ TargetTabWidget::TargetTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibratio
 
 void TargetTabWidget::boardTypeChanged(int index)
 {
-  // print to terminal that this function was called
   if (index == 0)
   {
-    plugin_name_ = "HandEyeTarget/Aruco";
+    plugin_name_ = "HandEyeTarget/Charuco";
   }
   else
   {
-    plugin_name_ = "HandEyeTarget/Charuco";
+    plugin_name_ = "HandEyeTarget/Aruco";
   }
 
   loadInputWidgetsForTargetType(plugin_name_);
@@ -170,15 +170,16 @@ void TargetTabWidget::boardModeChanged(int index)
 {
 
   // Update button labels based on the mode
+
   if (index == 0)
-  {  // Create New Board
-    create_target_btn_->setText("Create Target");
-    save_target_btn_->setEnabled(true);
-  }
-  else
   {  // Load Existing Board
     create_target_btn_->setText("Load Existing Board");
     save_target_btn_->setEnabled(false);
+  }
+  else
+  {  // Create New Board
+    create_target_btn_->setText("Create Target");
+    save_target_btn_->setEnabled(true);
   }
   loadInputWidgetsForTargetType(plugin_name_);
   updateParameterVisibility();
@@ -241,11 +242,11 @@ void TargetTabWidget::loadWidget(const rviz_common::Config& config)
   // Load parameters based on the selected mode
   if (board_mode_index == 0)
   {
-    mode_switch = moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterMode::LOAD_ONLY;
+    mode_switch = moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterMode::CREATE_ONLY;
   }
   else
   {
-    mode_switch = moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterMode::CREATE_ONLY;
+    mode_switch = moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterMode::LOAD_ONLY;
   }
 
   int param_int;
@@ -283,7 +284,6 @@ void TargetTabWidget::loadWidget(const rviz_common::Config& config)
   if (config.mapGetString("camera_topic_line_edit", &camera_topic))
   {
     camera_topic_line_edit_->setText(camera_topic);
-    // Optionally auto-subscribe immediately if desired:
     cameraTopicLineEditChanged();
   }
 
@@ -314,7 +314,6 @@ bool TargetTabWidget::loadInputWidgetsForTargetType(const std::string& plugin_na
 {
   if (plugin_name.empty())
   {
-    // PRINT message to say reached this, print to terminal
     RCLCPP_ERROR_STREAM(node_->get_logger(), "Plugin name is empty");
     return false;
   }
@@ -329,15 +328,15 @@ bool TargetTabWidget::loadInputWidgetsForTargetType(const std::string& plugin_na
     // Determine which layout to use based on board type
     QFormLayout* create_layout;
     QFormLayout* load_layout;
-    if (board_mode_selector_->currentIndex() == 0)
+    if (board_mode_selector_->currentIndex() == 1)
     {
       if (board_type_selector_->currentIndex() == 0)
-      {  // ArUco
-        create_layout = aruco_create_param_layout_;
+      {
+        create_layout = charuco_create_param_layout_;
       }
       else
-      {  // ChArUco
-        create_layout = charuco_create_param_layout_;
+      {
+        create_layout = aruco_create_param_layout_;
       }
       // Clear the layout
       while (create_layout->rowCount() > 0)
@@ -380,7 +379,7 @@ bool TargetTabWidget::loadInputWidgetsForTargetType(const std::string& plugin_na
     }
     else
     {
-      if (board_type_selector_->currentIndex() == 1)
+      if (board_type_selector_->currentIndex() == 0)
       {
         load_layout = charuco_load_param_layout_;
       }
@@ -448,7 +447,6 @@ bool TargetTabWidget::createTargetInstance()
 
   try
   {
-    //print to terminal that this function was called
     int board_mode = board_mode_selector_->currentIndex();
     int value = 0;
     float value_f = 0.0;
@@ -475,11 +473,11 @@ bool TargetTabWidget::createTargetInstance()
     }
     if (board_mode == 0)
     {
-      target_->setParameter("use_existing_board", 0);
+      target_->setParameter("use_existing_board", 1);
     }
     else
     {
-      target_->setParameter("use_existing_board", 1);
+      target_->setParameter("use_existing_board", 0);
     }
     target_->initialize();
   }
@@ -653,8 +651,8 @@ void TargetTabWidget::targetTypeComboboxChanged(const QString& text)
 void TargetTabWidget::createTargetImageBtnClicked(bool clicked)
 {
   createTargetInstance();
-  // if board mode is 0
-  if (board_mode_selector_->currentIndex() == 0)
+  
+  if (board_mode_selector_->currentIndex() == 1)
   {
     if (target_)
     {

@@ -140,7 +140,8 @@ ControlTabWidget::ControlTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibrat
   sample_layout->addWidget(sample_tree_view_);
   reprojection_error_label_ = new QLabel("Reprojection error: N/A");
   sample_layout->addWidget(reprojection_error_label_);
-  target_reprojection_error_label_ = new QLabel("Detection error, should be < 0.3: N/A");
+  target_reprojection_error_label_ = new QLabel("Detection error: N/A");
+  target_reprojection_error_label_->setStyleSheet("QLabel {color : green; }");
   sample_layout->addWidget(target_reprojection_error_label_);
 
   // Settings area
@@ -259,7 +260,15 @@ void ControlTabWidget::updateErrorValue(double error)
 {
   std::ostringstream err_text;
   err_text << std::fixed << std::setprecision(3);
-  err_text << "Detection error, should be < 0.3: \n" << error;
+  err_text << "Detection Error: \n" << error;
+  if (error > 0.3)
+  {
+    target_reprojection_error_label_->setStyleSheet("QLabel {color : red; }");
+  }
+  else
+  {
+    target_reprojection_error_label_->setStyleSheet("QLabel {color : green; }");
+  }
   target_reprojection_error_label_->setText(QString(err_text.str().c_str()));
 }
 
@@ -578,11 +587,11 @@ void ControlTabWidget::UpdateSensorMountType(int index)
     sensor_mount_type_ = static_cast<mhc::SensorMountType>(index);
     switch (sensor_mount_type_)
     {
-      case mhc::EYE_TO_HAND:
-        from_frame_tag_ = "base";
-        break;
       case mhc::EYE_IN_HAND:
         from_frame_tag_ = "eef";
+        break;
+      case mhc::EYE_TO_HAND:
+        from_frame_tag_ = "base";
         break;
       default:
         RCLCPP_ERROR_STREAM(node_->get_logger(), "Error sensor mount type.");

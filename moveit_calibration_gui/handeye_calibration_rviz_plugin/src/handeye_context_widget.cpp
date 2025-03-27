@@ -175,8 +175,8 @@ ContextTabWidget::ContextTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibrat
   group_left_top->setLayout(layout_left_top);
 
   sensor_mount_type_ = new QComboBox();
-  sensor_mount_type_->addItem("Eye-to-hand");
   sensor_mount_type_->addItem("Eye-in-hand");
+  sensor_mount_type_->addItem("Eye-to-hand");
   layout_left_top->addRow("Sensor configuration", sensor_mount_type_);
   connect(sensor_mount_type_, SIGNAL(activated(int)), this, SLOT(updateSensorMountType(int)));
 
@@ -311,11 +311,11 @@ void ContextTabWidget::updateAllMarkers()
 
     switch (setup)
     {
-      case mhc::EYE_TO_HAND:
-        from_frame = frames_["base"]->currentText();
-        break;
       case mhc::EYE_IN_HAND:
         from_frame = frames_["eef"]->currentText();
+        break;
+      case mhc::EYE_TO_HAND:
+        from_frame = frames_["base"]->currentText();
         break;
       default:
         RCLCPP_ERROR_STREAM(node_->get_logger(), "Error sensor mount type.");
