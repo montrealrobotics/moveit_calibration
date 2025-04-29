@@ -198,6 +198,9 @@ ContextTabWidget::ContextTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibrat
   frames_.insert(std::make_pair("base", new TFFrameNameComboBox(context_, node_, ROBOT_FRAME)));
   frame_layout->addRow("Robot base frame:", frames_["base"]);
 
+  frames_.insert(std::make_pair("camera_base", new TFFrameNameComboBox(context_, node_, CAMERA_FRAME)));
+  frame_layout->addRow("Camera base link:", frames_["camera_base"]);
+
   for (std::pair<const std::string, TFFrameNameComboBox*>& frame : frames_)
     connect(frame.second, SIGNAL(activated(int)), this, SLOT(updateFrameName(int)));
 
@@ -236,6 +239,8 @@ ContextTabWidget::ContextTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibrat
   camera_pose_ = Eigen::Isometry3d::Identity();
   fov_pose_ = Eigen::Quaterniond(0.5, -0.5, 0.5, -0.5);
   fov_pose_.translate(Eigen::Vector3d(0.0149, 0.0325, 0.0125));
+
+  sensor_to_camera_base_initialized_ = false;
 
   camera_info_.reset(new sensor_msgs::msg::CameraInfo());
 
@@ -299,8 +304,16 @@ void ContextTabWidget::setTFTool(rviz_visual_tools::TFVisualToolsPtr& tf_pub)
   tf_tools_ = tf_pub;
 }
 
+void ContextTabWidget::updateSensorToCameraBaseTransform(const Eigen::Isometry3d& transform, bool initialized)
+{
+  sensor_to_camera_base_initialized_ = initialized;
+  
+  updateAllMarkers();
+}
+
 void ContextTabWidget::updateAllMarkers()
 {
+  RCLCPP_INFO_STREAM(node_->get_logger(), "Updating all markers.");
   if (visual_tools_ && tf_tools_)
   {
     visual_tools_->deleteAllMarkers();
@@ -335,9 +348,20 @@ void ContextTabWidget::updateAllMarkers()
           visual_tools_->publishAxisLabeled(Eigen::Isometry3d::Identity(), frame_id);
         }
       }
+      RCLCPP_INFO_STREAM(node_->get_logger(), "Selected frame: " << from_frame.toStdString());
 
       // Publish camera and fov marker
       QString to_frame = frames_["sensor"]->currentText();
+      RCLCPP_INFO_STREAM(node_->get_logger(), "here");
+      QString to_cam_base_frame = frames_["camera_base"]->currentText();
+      RCLCPP_INFO_STREAM(node_->get_logger(), "Sensor base frame: " << to_cam_base_frame.toStdString());
+
+      if (sensor_to_camera_base_initialized_)
+      {
+        to_frame = to_cam_base_frame;
+      }
+      RCLCPP_INFO_STREAM(node_->get_logger(), "Sensor frame: " << to_frame.toStdString());
+
       if (!to_frame.isEmpty())
       {
         // // Get camera pose guess
@@ -468,7 +492,15 @@ visualization_msgs::msg::Marker ContextTabWidget::getCameraFOVMarker(const geome
 void ContextTabWidget::setCameraPose(double tx, double ty, double tz, double rx, double ry, double rz)
 {
   camera_pose_.setIdentity();
-  camera_pose_ = visual_tools_->convertFromXYZRPY(tx, ty, tz, rx, ry, rz, rviz_visual_tools::XYZ);
+  if (sensor_to_camera_base_initialized_) 
+  {
+    // Apply the stored transform: robot_to_base = robot_to_sensor * sensor_to_base
+    camera_pose_ = visual_tools_->convertFromXYZRPY(tx, ty, tz, rx, ry, rz, rviz_visual_tools::XYZ);
+  } 
+  else 
+  {
+    camera_pose_ = visual_tools_->convertFromXYZRPY(tx, ty, tz, rx, ry, rz, rviz_visual_tools::XYZ);  
+  }
 }
 
 void ContextTabWidget::setCameraInfo(sensor_msgs::msg::CameraInfo camera_info)
@@ -488,6 +520,11 @@ void ContextTabWidget::setOpticalFrame(const std::string& frame_id)
 {
   optical_frame_ = frame_id;
   updateFOVPose();
+}
+
+void ContextTabWidget::setCamBaseFrame(const std::string& frame_id)
+{
+  camera_base_frame_ = frame_id;
 }
 
 void ContextTabWidget::updateCameraPose(double tx, double ty, double tz, double rx, double ry, double rz)
@@ -514,6 +551,7 @@ void ContextTabWidget::updateSensorMountType(int index)
 
 void ContextTabWidget::updateFrameName(int index)
 {
+  RCLCPP_INFO(node_->get_logger(), "updating");
   updateAllMarkers();
   updateFOVPose();
 
@@ -534,7 +572,7 @@ void ContextTabWidget::updateFrameName(int index)
     calibration_display_->setStatus(rviz_common::properties::StatusProperty::Ok, "Calibration context",
                                     "Calibration frames have been selected.");
   }
-
+  RCLCPP_INFO(node_->get_logger(), "emmittung");
   Q_EMIT frameNameChanged(names);
 }
 

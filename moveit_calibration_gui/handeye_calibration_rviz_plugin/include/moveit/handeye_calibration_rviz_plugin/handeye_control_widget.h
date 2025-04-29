@@ -156,9 +156,12 @@ public:
 
   void fillPlanningGroupNameComboBox();
 
+  bool captureSensorToCameraBaseTransform();
+
 Q_SIGNALS:
 
   void sensorPoseUpdate(double x, double y, double z, double rx, double ry, double rz);
+  void sensorToCameraBaseTransformUpdate(const Eigen::Isometry3d& transform, bool initialized);
 
 public Q_SLOTS:
 
@@ -215,6 +218,9 @@ private:
   QLabel* reprojection_error_label_;
   QLabel* target_reprojection_error_label_;
   QStandardItemModel* tree_view_model_;
+
+  Eigen::Isometry3d sensor_to_camera_base_;
+  bool sensor_to_camera_base_initialized_;
 
   QComboBox* calibration_solver_;
 

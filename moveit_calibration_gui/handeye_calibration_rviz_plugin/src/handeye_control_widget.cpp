@@ -236,6 +236,9 @@ ControlTabWidget::ControlTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibrat
   connect(auto_skip_btn_, SIGNAL(clicked(bool)), this, SLOT(autoSkipBtnClicked(bool)));
   auto_btns_layout->addWidget(auto_skip_btn_);
 
+  sensor_to_camera_base_ = Eigen::Isometry3d::Identity();
+  sensor_to_camera_base_initialized_ = false;
+
   // Initialize handeye solver plugins
   std::vector<std::string> plugins;
   if (loadSolverPlugin(plugins))
@@ -270,6 +273,52 @@ void ControlTabWidget::updateErrorValue(double error)
     target_reprojection_error_label_->setStyleSheet("QLabel {color : green; }");
   }
   target_reprojection_error_label_->setText(QString(err_text.str().c_str()));
+}
+
+bool ControlTabWidget::captureSensorToCameraBaseTransform()
+{
+  // Reset the transform
+  sensor_to_camera_base_ = Eigen::Isometry3d::Identity();
+  sensor_to_camera_base_initialized_ = false;
+  RCLCPP_INFO_STREAM(node_->get_logger(), 
+              "Capturing transform from sensor '" << frame_names_["sensor"] 
+              << "' to camera base '" << frame_names_["camera_base"] << "'");
+  // If camera_base frame is not specified or is the same as sensor frame, no transform needed
+  if (frame_names_["camera_base"].empty() || 
+      frame_names_["camera_base"] == frame_names_["sensor"])
+  {
+    RCLCPP_INFO(node_->get_logger(), 
+                "Camera base frame not specified or same as sensor frame. No transform needed.");
+    return true;
+  }
+  
+  // Lookup the transform from sensor to camera_base
+  try {
+    geometry_msgs::msg::TransformStamped sensor_to_base_tf = 
+        tf_buffer_->lookupTransform(
+            frame_names_["sensor"], 
+            frame_names_["camera_base"], 
+            rclcpp::Time(0));
+            
+    // Convert to Eigen and store
+    sensor_to_camera_base_ = tf2::transformToEigen(sensor_to_base_tf);
+    sensor_to_camera_base_initialized_ = true;
+    
+    RCLCPP_INFO_STREAM(node_->get_logger(), 
+              "Captured transform from sensor '" << frame_names_["sensor"] 
+              << "' to camera base '" << frame_names_["camera_base"] << "':"
+              << "\nTranslation: " << sensor_to_camera_base_.translation().transpose()
+              << "\nRotation: \n" << sensor_to_camera_base_.rotation());
+
+    Q_EMIT sensorToCameraBaseTransformUpdate(sensor_to_camera_base_, true);
+    return true;
+  }
+  catch (tf2::TransformException& e) {
+    Q_EMIT sensorToCameraBaseTransformUpdate(Eigen::Isometry3d::Identity(), false);
+    RCLCPP_ERROR(node_->get_logger(), 
+                "Could not capture transform from sensor to camera base: %s", e.what());
+    return false;
+  }
 }
 
 void ControlTabWidget::loadWidget(const rviz_common::Config& config)
@@ -383,6 +432,7 @@ bool ControlTabWidget::takeTransformSamples()
   {
     geometry_msgs::msg::TransformStamped camera_to_object_tf;
     geometry_msgs::msg::TransformStamped base_to_eef_tf;
+    geometry_msgs::msg::TransformStamped camera_base_to_camera_optical;
 
     // Get the transform of the object w.r.t the camera
     camera_to_object_tf = tf_buffer_->lookupTransform(frame_names_["sensor"], frame_names_["object"], rclcpp::Time(0));
@@ -457,22 +507,39 @@ bool ControlTabWidget::solveCameraRobotPose()
     {
       camera_robot_pose_ = solver_->getCameraRobotPose();
 
-      // Update camera pose guess in context tab
-      Eigen::Vector3d t = camera_robot_pose_.translation();
-      Eigen::Vector3d r = camera_robot_pose_.rotation().eulerAngles(0, 1, 2);
-      Q_EMIT sensorPoseUpdate(t[0], t[1], t[2], r[0], r[1], r[2]);
-
       // Calculate reprojection error
       const auto& reproj_err = solver_->getReprojectionError(effector_wrt_world_, object_wrt_sensor_,
-                                                             camera_robot_pose_, sensor_mount_type_);
+      camera_robot_pose_, sensor_mount_type_);
       std::ostringstream reproj_err_text;
       reproj_err_text << "Reprojection error:\n" << reproj_err.first << " m, " << reproj_err.second << " rad";
       RCLCPP_WARN(node_->get_logger(), "%s", reproj_err_text.str().c_str());
       reprojection_error_label_->setText(QString(reproj_err_text.str().c_str()));
 
+      // Transform to camera_base frame if needed and if we have the transform
+      if (sensor_to_camera_base_initialized_)
+      {
+        // Apply the stored transform: robot_to_base = robot_to_sensor * sensor_to_base
+        camera_robot_pose_ = camera_robot_pose_ * sensor_to_camera_base_;
+        RCLCPP_INFO(node_->get_logger(), "Applied stored transform from sensor to camera base frame");
+      }
+      else if (!frame_names_["camera_base"].empty() && 
+               frame_names_["camera_base"] != frame_names_["sensor"])
+      {
+        RCLCPP_WARN(node_->get_logger(), 
+                    "Camera base frame specified but transform not captured. Using sensor frame.");
+      }
+
+      // Update camera pose guess in context tab
+      Eigen::Vector3d t = camera_robot_pose_.translation();
+      Eigen::Vector3d r = camera_robot_pose_.rotation().eulerAngles(0, 1, 2);
+      Q_EMIT sensorPoseUpdate(t[0], t[1], t[2], r[0], r[1], r[2]);
+
       // Publish camera pose tf
       const std::string& from_frame = frame_names_[from_frame_tag_];
-      const std::string& to_frame = frame_names_["sensor"];
+      const std::string& to_frame = sensor_to_camera_base_initialized_ ? 
+                                   frame_names_["camera_base"] : 
+                                   frame_names_["sensor"];
+
       if (!from_frame.empty() && !to_frame.empty())
       {
         tf_tools_->clearAllTransforms();
@@ -602,14 +669,51 @@ void ControlTabWidget::UpdateSensorMountType(int index)
 
 void ControlTabWidget::updateFrameNames(std::map<std::string, std::string> names)
 {
+  std::string prev_sensor_frame = frame_names_["sensor"];
+  std::string prev_camera_base_frame = frame_names_["camera_base"];
+  RCLCPP_INFO_STREAM(node_->get_logger(), "Updating frame names: " << names["sensor"] << " " << names["camera_base"]);
+  RCLCPP_INFO_STREAM(node_->get_logger(), "Updating frame names: " << prev_sensor_frame << " " << prev_camera_base_frame);
   frame_names_ = names;
-  RCLCPP_DEBUG(node_->get_logger(), "Frame names changed:");
-  for (const std::pair<const std::string, std::string>& name : frame_names_)
-    RCLCPP_DEBUG_STREAM(node_->get_logger(), name.first << " : " << name.second);
+  bool sensor_frame_changed = (prev_sensor_frame != frame_names_["sensor"]);
+  bool camera_base_frame_changed = (prev_camera_base_frame != frame_names_["camera_base"]);
+  
+  if (sensor_frame_changed || camera_base_frame_changed) {
+    RCLCPP_INFO(node_->get_logger(), "Updating cam frame names");
+    // Clear any published transforms
+    if (tf_tools_)
+    {
+      tf_tools_->clearAllTransforms();
+    }
+
+    sensor_to_camera_base_initialized_ = false;
+
+    captureSensorToCameraBaseTransform();
+
+    // If we already have calibration data, warn the user about needing to recalibrate
+    if (!effector_wrt_world_.empty() || !object_wrt_sensor_.empty()) {
+      QMessageBox::warning(this, tr("Frame Changed"), 
+                          tr("Camera frame has changed. You need to re-solve or re-calibrate to update the transform."));
+      
+      // Use existing status mechanism
+      calibration_display_->setStatus(rviz_common::properties::StatusProperty::Warn, "Calibration",
+                                      "Camera frames changed - recalibration needed.");
+
+      // Reset reprojection error display
+      reprojection_error_label_->setText("Reprojection error: N/A");
+    }
+  }
 }
 
 void ControlTabWidget::takeSampleBtnClicked(bool clicked)
 {
+  if (effector_wrt_world_.empty() && object_wrt_sensor_.empty()) {
+    if (!captureSensorToCameraBaseTransform()) {
+      QMessageBox::warning(this, tr("Transform Error"), 
+                         tr("Could not capture transform from sensor to camera base. "
+                            "Calibration will use sensor frame only."));
+    }
+  }
+
   if (frameNamesEmpty() || !takeTransformSamples())
     return;
 
@@ -871,6 +975,12 @@ void ControlTabWidget::saveJointStateBtnClicked(bool clicked)
 
 void ControlTabWidget::loadSamplesBtnClicked(bool clicked)
 {
+  if (!captureSensorToCameraBaseTransform()) {
+    QMessageBox::warning(this, tr("Transform Error"), 
+                       tr("Could not capture transform from sensor to camera base. "
+                          "Calibration will use sensor frame only."));
+  }
+
   QString file_name = QFileDialog::getOpenFileName(this, tr("Load Samples"), "", tr("Target File (*.yaml)"), nullptr,
                                                    QFileDialog::DontUseNativeDialog);
 

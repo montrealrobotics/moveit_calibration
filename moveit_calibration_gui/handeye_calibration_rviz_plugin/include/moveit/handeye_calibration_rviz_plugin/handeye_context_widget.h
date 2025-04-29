@@ -191,6 +191,10 @@ public Q_SLOTS:
 
   void setOpticalFrame(const std::string& frame_id);
 
+  void setCamBaseFrame(const std::string& frame_id);
+
+  void updateSensorToCameraBaseTransform(const Eigen::Isometry3d& transform, bool initialized);
+
   void updateCameraPose(double tx, double ty, double tz, double rx, double ry, double rz);
 
 private Q_SLOTS:
@@ -234,8 +238,13 @@ private:
 
   // Transform from camera to robot base or end-effector
   Eigen::Isometry3d camera_pose_;
+  Eigen::Isometry3d camera_base_pose_;
+
+  Eigen::Isometry3d sensor_to_camera_base_;
+  bool sensor_to_camera_base_initialized_;
 
   std::string optical_frame_;
+  std::string camera_base_frame_;
 
   // Transform from camera to fov
   Eigen::Isometry3d fov_pose_;
