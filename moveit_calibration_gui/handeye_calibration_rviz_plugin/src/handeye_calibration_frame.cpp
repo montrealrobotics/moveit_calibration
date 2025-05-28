@@ -49,11 +49,9 @@ HandEyeCalibrationFrame::HandEyeCalibrationFrame(HandEyeCalibrationDisplay* pdis
 {
   node_ = std::make_shared<rclcpp::Node>("handeye_calibration_frame");
   setMinimumSize(695, 460);
-  // Basic widget container
   QVBoxLayout* layout = new QVBoxLayout();
   setLayout(layout);
 
-  // Description
   QLabel* description = new QLabel(this);
   description->setText(QString("Configure the position and orientation of your 3D sensors to work with MoveIt"));
   description->setWordWrap(true);
@@ -90,7 +88,6 @@ HandEyeCalibrationFrame::HandEyeCalibrationFrame(HandEyeCalibrationDisplay* pdis
   tabs->addTab(tab_control_, "Calibrate");
   layout->addWidget(tabs);
 
-  // Spin node in the background for sub callbacks
   executor_.add_node(node_);
   auto spin = [this]() {
     while (rclcpp::ok())
@@ -112,7 +109,6 @@ void HandEyeCalibrationFrame::saveWidget(rviz_common::Config& config) const
   tab_control_->saveWidget(config);
 }
 
-// Load all configuration data for this panel from the given Config object.
 void HandEyeCalibrationFrame::loadWidget(const rviz_common::Config& config)
 {
   tab_target_->loadWidget(config);

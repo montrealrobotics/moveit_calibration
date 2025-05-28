@@ -97,7 +97,6 @@ void HandEyeCalibrationDisplay::save(rviz_common::Config config) const
   }
 }
 
-// Load all configuration data for this panel from the given Config object.
 void HandEyeCalibrationDisplay::load(const rviz_common::Config& config)
 {
   Display::load(config);

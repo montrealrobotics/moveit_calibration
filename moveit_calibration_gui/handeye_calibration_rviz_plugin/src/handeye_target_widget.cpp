@@ -60,28 +60,24 @@ TargetTabWidget::TargetTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibratio
   QVBoxLayout* layout_left = new QVBoxLayout();
   layout->addLayout(layout_left);
   plugin_name_ = "HandEyeTarget/Charuco";
-
-  // Board type and mode selection area
+  first_loop_ = true;
   QGroupBox* selection_group = new QGroupBox("Board Configuration", this);
   layout_left->addWidget(selection_group);
   QFormLayout* selection_layout = new QFormLayout();
   selection_group->setLayout(selection_layout);
 
-  // Board type selector (ArUco vs ChArUco)
   board_type_selector_ = new QComboBox();
   board_type_selector_->addItem("ChArUco Board");
   board_type_selector_->addItem("ArUco Board");
   connect(board_type_selector_, SIGNAL(currentIndexChanged(int)), this, SLOT(boardTypeChanged(int)));
   selection_layout->addRow("Board Type", board_type_selector_);
 
-  // Board mode selector (Create vs Load)
   board_mode_selector_ = new QComboBox();
   board_mode_selector_->addItem("Load Existing Board");
   board_mode_selector_->addItem("Create New Board");
   connect(board_mode_selector_, SIGNAL(currentIndexChanged(int)), this, SLOT(boardModeChanged(int)));
   selection_layout->addRow("Mode", board_mode_selector_);
 
-  // Create stacked widget for parameters
   params_stack_ = new QStackedWidget();
   layout_left->addWidget(params_stack_);
 
@@ -105,7 +101,6 @@ TargetTabWidget::TargetTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibratio
   aruco_create_widget->setLayout(aruco_create_param_layout_);
   params_stack_->addWidget(aruco_create_widget);
 
-  // Target 3D pose recognition area
   QGroupBox* group_left_bottom = new QGroupBox("Target Pose Detection", this);
   layout_left->addWidget(group_left_bottom);
   QFormLayout* layout_left_bottom = new QFormLayout();
@@ -114,10 +109,8 @@ TargetTabWidget::TargetTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibratio
   camera_topic_line_edit_ = new QLineEdit(this);
   layout_left_bottom->addRow("Camera Image Topic", camera_topic_line_edit_);
 
-  // Connect the editingFinished signal (fires when user presses Enter or focus leaves):
   connect(camera_topic_line_edit_, &QLineEdit::editingFinished, this, &TargetTabWidget::cameraTopicLineEditChanged);
 
-  // Target image display, create and save area
   QGroupBox* group_right = new QGroupBox("Target", this);
   group_right->setMinimumWidth(330);
   layout->addWidget(group_right);
@@ -139,14 +132,11 @@ TargetTabWidget::TargetTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibratio
 
   loadAvailableTargetPlugins();
 
-  // Initialize image publisher
   image_pub_ = it_.advertise("/handeye_calibration/target_detection", 1);
 
-  // Register custom types
   qRegisterMetaType<sensor_msgs::msg::CameraInfo>();
   qRegisterMetaType<std::string>();
 
-  // Initialize status
   calibration_display_->setStatusStd(rviz_common::properties::StatusProperty::Warn, "Target detection",
                                      "Not subscribed to image topic.");
 }
@@ -169,15 +159,13 @@ void TargetTabWidget::boardTypeChanged(int index)
 void TargetTabWidget::boardModeChanged(int index)
 {
 
-  // Update button labels based on the mode
-
   if (index == 0)
-  {  // Load Existing Board
+  {
     create_target_btn_->setText("Load Existing Board");
     save_target_btn_->setEnabled(false);
   }
   else
-  {  // Create New Board
+  {
     create_target_btn_->setText("Create Target");
     save_target_btn_->setEnabled(true);
   }
@@ -190,18 +178,15 @@ void TargetTabWidget::updateParameterVisibility()
   int board_type = board_type_selector_->currentIndex();
   int board_mode = board_mode_selector_->currentIndex();
 
-  // Calculate which parameter page to show (0-3)
   int page_index = board_type * 2 + board_mode;
   params_stack_->setCurrentIndex(page_index);
 }
 
 void TargetTabWidget::saveWidget(rviz_common::Config& config)
 {
-  // Save the selections
   config.mapSetValue("board_type_index", board_type_selector_->currentIndex());
   config.mapSetValue("board_mode_index", board_mode_selector_->currentIndex());
 
-  // Save parameter inputs for ArUco create mode
   for (const moveit_handeye_calibration::HandEyeTargetBase::Parameter& param : target_plugin_params_)
   {
     switch (param.parameter_type_)
@@ -222,7 +207,6 @@ void TargetTabWidget::saveWidget(rviz_common::Config& config)
 
 void TargetTabWidget::loadWidget(const rviz_common::Config& config)
 {
-  // Load the selections
   int board_type_index = 0;
   int board_mode_index = 0;
 
@@ -239,7 +223,6 @@ void TargetTabWidget::loadWidget(const rviz_common::Config& config)
   moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterMode mode_switch =
       moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterMode::BOTH;
 
-  // Load parameters based on the selected mode
   if (board_mode_index == 0)
   {
     mode_switch = moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterMode::CREATE_ONLY;
@@ -257,7 +240,6 @@ void TargetTabWidget::loadWidget(const rviz_common::Config& config)
   {
     if (param.mode_ == mode_switch)
     {
-      // skip this parameter
       continue;
     }
     switch (param.parameter_type_)
@@ -325,7 +307,6 @@ bool TargetTabWidget::loadInputWidgetsForTargetType(const std::string& plugin_na
     target_plugin_params_ = target_->getParameters();
     target_param_inputs_.clear();
 
-    // Determine which layout to use based on board type
     QFormLayout* create_layout;
     QFormLayout* load_layout;
     if (board_mode_selector_->currentIndex() == 1)
@@ -338,18 +319,15 @@ bool TargetTabWidget::loadInputWidgetsForTargetType(const std::string& plugin_na
       {
         create_layout = aruco_create_param_layout_;
       }
-      // Clear the layout
       while (create_layout->rowCount() > 0)
       {
         create_layout->removeRow(0);
       }
-      // Add parameter widgets
       for (const auto& param : target_plugin_params_)
       {
-        // print to terminal the mode type
         if (param.mode_ == moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterMode::LOAD_ONLY || param.name_ == "use_existing_board")
         {
-          // skip this parameter
+
           continue;
         }
         switch (param.parameter_type_)
@@ -387,19 +365,16 @@ bool TargetTabWidget::loadInputWidgetsForTargetType(const std::string& plugin_na
       {
         load_layout = aruco_load_param_layout_;
       }
-      // Clear the layout
+
       while (load_layout->rowCount() > 0)
       {
         load_layout->removeRow(0);
       }
 
-      // Add parameter widgets
       for (const auto& param : target_plugin_params_)
       {
-        // print to terminal the mode type
         if (param.mode_ == moveit_handeye_calibration::HandEyeTargetBase::Parameter::ParameterMode::CREATE_ONLY || param.name_ == "use_existing_board")
         {
-          // skip this parameter
           continue;
         }
         switch (param.parameter_type_)
@@ -428,7 +403,6 @@ bool TargetTabWidget::loadInputWidgetsForTargetType(const std::string& plugin_na
       }
     }
 
-    // Update UI to match current selections
     updateParameterVisibility();
   }
   catch (pluginlib::PluginlibException& ex)
@@ -493,17 +467,13 @@ bool TargetTabWidget::createTargetInstance()
 
 void TargetTabWidget::cameraTopicLineEditChanged()
 {
-  // Shutdown the old subscription, if any
   camera_sub_.shutdown();
 
-  // Clear the status
   calibration_display_->setStatusStd(rviz_common::properties::StatusProperty::Warn, "Target detection",
                                      "Not subscribed to image topic.");
 
-  // Get whatever user typed
   QString topic = camera_topic_line_edit_->text();
 
-  // If not empty, try to subscribe
   if (!topic.isEmpty())
   {
     try
@@ -529,8 +499,12 @@ void TargetTabWidget::cameraCallback(const sensor_msgs::msg::Image::ConstSharedP
 
 void TargetTabWidget::imageCallback(const sensor_msgs::msg::Image::ConstSharedPtr& msg)
 {
-  //createTargetInstance();
+  if (first_loop_)
+  {
 
+    createTargetInstance();
+    first_loop_ = false;
+  }
   // Depth image format `16UC1` cannot be converted to `MONO8`
   if (msg->encoding == "16UC1")
   {
@@ -663,7 +637,6 @@ void TargetTabWidget::createTargetImageBtnClicked(bool clicked)
 
     if (!target_image_.empty())
     {
-      // Show target image
       QImage qimage(target_image_.data, target_image_.cols, target_image_.rows, QImage::Format_Grayscale8);
       if (target_image_.cols > target_image_.rows)
         qimage = qimage.scaledToWidth(320, Qt::SmoothTransformation);

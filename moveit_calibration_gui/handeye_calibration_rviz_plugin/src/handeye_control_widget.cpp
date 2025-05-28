@@ -41,14 +41,13 @@
 namespace moveit_rviz_plugin
 {
 const std::string LOGNAME = "handeye_control_widget";
-const double MIN_ROTATION = M_PI / 36.;  // Smallest allowed rotation, 5 degrees
+const double MIN_ROTATION = M_PI / 36.;
 
 ProgressBarWidget::ProgressBarWidget(QWidget* parent, int min, int max, int value) : QWidget(parent)
 {
   QHBoxLayout* row = new QHBoxLayout(this);
   row->setContentsMargins(0, 10, 0, 10);
 
-  // QLabel init
   name_label_ = new QLabel("Recorded joint state progress:", this);
   name_label_->setContentsMargins(0, 0, 0, 0);
   row->addWidget(name_label_);
@@ -57,7 +56,6 @@ ProgressBarWidget::ProgressBarWidget(QWidget* parent, int min, int max, int valu
   value_label_->setContentsMargins(0, 0, 0, 0);
   row->addWidget(value_label_);
 
-  // QProgressBar init
   bar_ = new QProgressBar(this);
   bar_->setTextVisible(true);
   bar_->setMinimum(min);
@@ -119,11 +117,9 @@ ControlTabWidget::ControlTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibrat
   QHBoxLayout* calib_layout = new QHBoxLayout();
   layout->addLayout(calib_layout);
 
-  // Calibration progress
   auto_progress_ = new ProgressBarWidget(this);
   layout->addWidget(auto_progress_);
 
-  // Pose sample tree view area
   QGroupBox* sample_group = new QGroupBox("Pose samples");
   sample_group->setMinimumWidth(280);
   calib_layout->addWidget(sample_group);
@@ -144,7 +140,6 @@ ControlTabWidget::ControlTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibrat
   target_reprojection_error_label_->setStyleSheet("QLabel {color : green; }");
   sample_layout->addWidget(target_reprojection_error_label_);
 
-  // Settings area
   QVBoxLayout* layout_right = new QVBoxLayout();
   calib_layout->addLayout(layout_right);
 
@@ -184,7 +179,6 @@ ControlTabWidget::ControlTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibrat
   connect(save_camera_pose_btn_, SIGNAL(clicked(bool)), this, SLOT(saveCameraPoseBtnClicked(bool)));
   setting_layout_bottom->addWidget(save_camera_pose_btn_, 2, 0, 1, 2);
 
-  // Manual calibration area
   QGroupBox* manual_cal_group = new QGroupBox("Manual Calibration");
   layout_right->addWidget(manual_cal_group);
   QGridLayout* control_cal_layout = new QGridLayout();
@@ -210,7 +204,6 @@ ControlTabWidget::ControlTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibrat
   connect(solve_btn_, SIGNAL(clicked(bool)), this, SLOT(solveBtnClicked(bool)));
   control_cal_layout->addWidget(solve_btn_, 1, 1);
 
-  // Auto calibration area
   QGroupBox* auto_cal_group = new QGroupBox("Calibrate With Recorded Joint States");
   layout_right->addWidget(auto_cal_group);
   QVBoxLayout* auto_cal_layout = new QVBoxLayout();
@@ -239,22 +232,18 @@ ControlTabWidget::ControlTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibrat
   sensor_to_camera_base_ = Eigen::Isometry3d::Identity();
   sensor_to_camera_base_initialized_ = false;
 
-  // Initialize handeye solver plugins
   std::vector<std::string> plugins;
   if (loadSolverPlugin(plugins))
     fillSolverTypes(plugins);
 
-  // Connect PSM and get group names
   fillPlanningGroupNameComboBox();
 
-  // Set plan and execution watcher
   plan_watcher_ = new QFutureWatcher<void>(this);
   connect(plan_watcher_, &QFutureWatcher<void>::finished, this, &ControlTabWidget::planFinished);
 
   execution_watcher_ = new QFutureWatcher<void>(this);
   connect(execution_watcher_, &QFutureWatcher<void>::finished, this, &ControlTabWidget::executeFinished);
 
-  // Set initial status
   calibration_display_->setStatus(rviz_common::properties::StatusProperty::Ok, "Calibration",
                                   "Collect 5 samples to start calibration.");
 }
@@ -277,13 +266,12 @@ void ControlTabWidget::updateErrorValue(double error)
 
 bool ControlTabWidget::captureSensorToCameraBaseTransform()
 {
-  // Reset the transform
+
   sensor_to_camera_base_ = Eigen::Isometry3d::Identity();
   sensor_to_camera_base_initialized_ = false;
   RCLCPP_INFO_STREAM(node_->get_logger(), 
               "Capturing transform from sensor '" << frame_names_["sensor"] 
               << "' to camera base '" << frame_names_["camera_base"] << "'");
-  // If camera_base frame is not specified or is the same as sensor frame, no transform needed
   if (frame_names_["camera_base"].empty() || 
       frame_names_["camera_base"] == frame_names_["sensor"])
   {
@@ -291,8 +279,7 @@ bool ControlTabWidget::captureSensorToCameraBaseTransform()
                 "Camera base frame not specified or same as sensor frame. No transform needed.");
     return true;
   }
-  
-  // Lookup the transform from sensor to camera_base
+
   try {
     geometry_msgs::msg::TransformStamped sensor_to_base_tf = 
         tf_buffer_->lookupTransform(
@@ -300,7 +287,6 @@ bool ControlTabWidget::captureSensorToCameraBaseTransform()
             frame_names_["camera_base"], 
             rclcpp::Time(0));
             
-    // Convert to Eigen and store
     sensor_to_camera_base_ = tf2::transformToEigen(sensor_to_base_tf);
     sensor_to_camera_base_initialized_ = true;
     
@@ -375,7 +361,6 @@ bool ControlTabWidget::loadSolverPlugin(std::vector<std::string>& plugins)
     }
   }
 
-  // Get available plugins
   plugins = solver_plugins_loader_->getDeclaredClasses();
   return !plugins.empty();
 }
@@ -407,7 +392,7 @@ void ControlTabWidget::fillSolverTypes(const std::vector<std::string>& plugins)
       const std::vector<std::string>& solvers = solver_->getSolverNames();
       for (const std::string& solver : solvers)
       {
-        std::string solver_name = plugin + "/" + solver;  // solver name format is "plugin_name/solver_name"
+        std::string solver_name = plugin + "/" + solver;
         calibration_solver_->addItem(tr(solver_name.c_str()));
       }
     }
@@ -427,20 +412,16 @@ std::string ControlTabWidget::parseSolverName(const std::string& solver_name, ch
 
 bool ControlTabWidget::takeTransformSamples()
 {
-  // Store the pair of two tf transforms and calculate camera_robot pose
   try
   {
     geometry_msgs::msg::TransformStamped camera_to_object_tf;
     geometry_msgs::msg::TransformStamped base_to_eef_tf;
     geometry_msgs::msg::TransformStamped camera_base_to_camera_optical;
 
-    // Get the transform of the object w.r.t the camera
     camera_to_object_tf = tf_buffer_->lookupTransform(frame_names_["sensor"], frame_names_["object"], rclcpp::Time(0));
 
-    // Get the transform of the end-effector w.r.t the robot base
     base_to_eef_tf = tf_buffer_->lookupTransform(frame_names_["base"], frame_names_["eef"], rclcpp::Time(0));
 
-    // Verify that sample contains sufficient rotation
     Eigen::Isometry3d base_to_eef_eig, camera_to_object_eig;
     base_to_eef_eig = tf2::transformToEigen(base_to_eef_tf);
     camera_to_object_eig = tf2::transformToEigen(camera_to_object_tf);
@@ -467,7 +448,6 @@ bool ControlTabWidget::takeTransformSamples()
       }
     }
 
-    // Renormalize quaternions, to avoid numerical issues
     tf2::Quaternion tf2_quat;
     tf2::fromMsg(camera_to_object_tf.transform.rotation, tf2_quat);
     tf2_quat.normalize();
@@ -476,7 +456,6 @@ bool ControlTabWidget::takeTransformSamples()
     tf2_quat.normalize();
     base_to_eef_tf.transform.rotation = tf2::toMsg(tf2_quat);
 
-    // save the pose samples
     effector_wrt_world_.push_back(base_to_eef_eig);
     object_wrt_sensor_.push_back(camera_to_object_eig);
 
@@ -507,7 +486,6 @@ bool ControlTabWidget::solveCameraRobotPose()
     {
       camera_robot_pose_ = solver_->getCameraRobotPose();
 
-      // Calculate reprojection error
       const auto& reproj_err = solver_->getReprojectionError(effector_wrt_world_, object_wrt_sensor_,
       camera_robot_pose_, sensor_mount_type_);
       std::ostringstream reproj_err_text;
@@ -515,10 +493,9 @@ bool ControlTabWidget::solveCameraRobotPose()
       RCLCPP_WARN(node_->get_logger(), "%s", reproj_err_text.str().c_str());
       reprojection_error_label_->setText(QString(reproj_err_text.str().c_str()));
 
-      // Transform to camera_base frame if needed and if we have the transform
       if (sensor_to_camera_base_initialized_)
       {
-        // Apply the stored transform: robot_to_base = robot_to_sensor * sensor_to_base
+
         camera_robot_pose_ = camera_robot_pose_ * sensor_to_camera_base_;
         RCLCPP_INFO(node_->get_logger(), "Applied stored transform from sensor to camera base frame");
       }
@@ -529,12 +506,11 @@ bool ControlTabWidget::solveCameraRobotPose()
                     "Camera base frame specified but transform not captured. Using sensor frame.");
       }
 
-      // Update camera pose guess in context tab
       Eigen::Vector3d t = camera_robot_pose_.translation();
       Eigen::Vector3d r = camera_robot_pose_.rotation().eulerAngles(0, 1, 2);
       Q_EMIT sensorPoseUpdate(t[0], t[1], t[2], r[0], r[1], r[2]);
+      RCLCPP_INFO_STREAM(node_->get_logger(), "roll" << r[0]);
 
-      // Publish camera pose tf
       const std::string& from_frame = frame_names_[from_frame_tag_];
       const std::string& to_frame = sensor_to_camera_base_initialized_ ? 
                                    frame_names_["camera_base"] : 
@@ -554,7 +530,6 @@ bool ControlTabWidget::solveCameraRobotPose()
       }
       else
       {
-        // CLI warning message without formatting
         {
           std::stringstream warn_msg;
           warn_msg << "Found camera pose:" << std::endl
@@ -562,7 +537,7 @@ bool ControlTabWidget::solveCameraRobotPose()
                    << "but " << from_frame_tag_ << " or sensor frame is undefined.";
           RCLCPP_ERROR_STREAM(node_->get_logger(), warn_msg.str());
         }
-        // GUI warning message with formatting
+
         {
           std::stringstream warn_msg;
           warn_msg << "Found camera pose:<pre>" << std::endl
@@ -593,7 +568,6 @@ bool ControlTabWidget::solveCameraRobotPose()
 
 bool ControlTabWidget::frameNamesEmpty()
 {
-  // All of four frame names needed for getting the pair of two tf transforms
   if (frame_names_["sensor"].empty() || frame_names_["object"].empty() || frame_names_["base"].empty() ||
       frame_names_["eef"].empty())
   {
@@ -679,7 +653,6 @@ void ControlTabWidget::updateFrameNames(std::map<std::string, std::string> names
   
   if (sensor_frame_changed || camera_base_frame_changed) {
     RCLCPP_INFO(node_->get_logger(), "Updating cam frame names");
-    // Clear any published transforms
     if (tf_tools_)
     {
       tf_tools_->clearAllTransforms();
@@ -689,16 +662,13 @@ void ControlTabWidget::updateFrameNames(std::map<std::string, std::string> names
 
     captureSensorToCameraBaseTransform();
 
-    // If we already have calibration data, warn the user about needing to recalibrate
     if (!effector_wrt_world_.empty() || !object_wrt_sensor_.empty()) {
       QMessageBox::warning(this, tr("Frame Changed"), 
                           tr("Camera frame has changed. You need to re-solve or re-calibrate to update the transform."));
       
-      // Use existing status mechanism
       calibration_display_->setStatus(rviz_common::properties::StatusProperty::Warn, "Calibration",
                                       "Camera frames changed - recalibration needed.");
 
-      // Reset reprojection error display
       reprojection_error_label_->setText("Reprojection error: N/A");
     }
   }
@@ -706,13 +676,6 @@ void ControlTabWidget::updateFrameNames(std::map<std::string, std::string> names
 
 void ControlTabWidget::takeSampleBtnClicked(bool clicked)
 {
-  if (effector_wrt_world_.empty() && object_wrt_sensor_.empty()) {
-    if (!captureSensorToCameraBaseTransform()) {
-      QMessageBox::warning(this, tr("Transform Error"), 
-                         tr("Could not capture transform from sensor to camera base. "
-                            "Calibration will use sensor frame only."));
-    }
-  }
 
   if (frameNamesEmpty() || !takeTransformSamples())
     return;
@@ -721,10 +684,9 @@ void ControlTabWidget::takeSampleBtnClicked(bool clicked)
     if (!solveCameraRobotPose())
       return;
 
-  // Save the joint values of current robot state
   if (planning_scene_monitor_)
   {
-    planning_scene_monitor_->waitForCurrentRobotState(rclcpp::Clock(RCL_ROS_TIME).now(), 0.1);  // Revisit this change
+    planning_scene_monitor_->waitForCurrentRobotState(rclcpp::Clock(RCL_ROS_TIME).now(), 0.1);
     const planning_scene_monitor::LockedPlanningSceneRO& ps =
         planning_scene_monitor::LockedPlanningSceneRO(planning_scene_monitor_);
     if (ps)
@@ -757,11 +719,9 @@ void ControlTabWidget::deleteLatestSampleBtnClicked(bool clicked)
     return;
   }
 
-  // Delete latest recorded transform
   effector_wrt_world_.pop_back();
   object_wrt_sensor_.pop_back();
 
-  // Delete latest recorded joint state, update progress bar
   joint_states_.pop_back();
   tree_view_model_->takeRow(joint_states_.size());
   auto_progress_->setMax(joint_states_.size());
@@ -769,12 +729,10 @@ void ControlTabWidget::deleteLatestSampleBtnClicked(bool clicked)
 
 void ControlTabWidget::clearSamplesBtnClicked(bool clicked)
 {
-  // Clear recorded transforms
   effector_wrt_world_.clear();
   object_wrt_sensor_.clear();
   tree_view_model_->clear();
 
-  // Clear recorded joint states
   joint_states_.clear();
   auto_progress_->setMax(0);
   auto_progress_->setValue(0);
@@ -783,7 +741,7 @@ void ControlTabWidget::clearSamplesBtnClicked(bool clicked)
 void ControlTabWidget::saveCameraPoseBtnClicked(bool clicked)
 {
   std::string& from_frame = frame_names_[from_frame_tag_];
-  std::string& to_frame = frame_names_["sensor"];
+  std::string& to_frame = frame_names_["camera_base"];
 
   if (from_frame.empty() || to_frame.empty())
   {
@@ -884,7 +842,6 @@ void ControlTabWidget::setGroupName(const std::string& group_name)
     move_group_.reset(
         new moveit::planning_interface::MoveGroupInterface(node_, opt, tf_buffer_, rclcpp::Duration(5, 0)));
 
-    // Clear the joint values from any previous group
     joint_states_.clear();
     auto_progress_->setMax(0);
   }
@@ -897,7 +854,7 @@ void ControlTabWidget::setGroupName(const std::string& group_name)
 void ControlTabWidget::fillPlanningGroupNameComboBox()
 {
   group_name_->clear();
-  // Fill in available planning group names
+
   planning_scene_monitor_.reset(new planning_scene_monitor::PlanningSceneMonitor(node_, "robot_description", tf_buffer_,
                                                                                  "planning_scene_monitor"));
   if (planning_scene_monitor_)
@@ -948,14 +905,12 @@ void ControlTabWidget::saveJointStateBtnClicked(bool clicked)
   YAML::Emitter emitter;
   emitter << YAML::BeginMap;
 
-  // Joint Names
   emitter << YAML::Key << "joint_names";
   emitter << YAML::Value << YAML::BeginSeq;
   for (size_t i = 0; i < joint_names_.size(); ++i)
     emitter << YAML::Value << joint_names_[i];
   emitter << YAML::EndSeq;
 
-  // Joint Values
   emitter << YAML::Key << "joint_values";
   emitter << YAML::Value << YAML::BeginSeq;
   for (size_t i = 0; i < joint_states_.size(); ++i)
@@ -975,11 +930,6 @@ void ControlTabWidget::saveJointStateBtnClicked(bool clicked)
 
 void ControlTabWidget::loadSamplesBtnClicked(bool clicked)
 {
-  if (!captureSensorToCameraBaseTransform()) {
-    QMessageBox::warning(this, tr("Transform Error"), 
-                       tr("Could not capture transform from sensor to camera base. "
-                          "Calibration will use sensor frame only."));
-  }
 
   QString file_name = QFileDialog::getOpenFileName(this, tr("Load Samples"), "", tr("Target File (*.yaml)"), nullptr,
                                                    QFileDialog::DontUseNativeDialog);
@@ -990,7 +940,6 @@ void ControlTabWidget::loadSamplesBtnClicked(bool clicked)
   effector_wrt_world_.clear();
   object_wrt_sensor_.clear();
 
-  // transformations are serialised as 4x4 row-major matrices
   typedef Eigen::Matrix<double, 4, 4, Eigen::RowMajor> Matrix4d_rm;
 
   YAML::Node yaml_states = YAML::LoadFile(file_name.toStdString());
@@ -1004,7 +953,6 @@ void ControlTabWidget::loadSamplesBtnClicked(bool clicked)
       object_wrt_sensor_.emplace_back(
           Eigen::Map<const Matrix4d_rm>(yaml_states[i]["object_wrt_sensor"].as<std::vector<double>>().data()));
 
-      // add to GUI
       ControlTabWidget::addPoseSampleToTreeView(tf2::eigenToTransform(object_wrt_sensor_.back()),
                                                 tf2::eigenToTransform(effector_wrt_world_.back()),
                                                 effector_wrt_world_.size());
@@ -1097,7 +1045,6 @@ void ControlTabWidget::loadJointStateBtnClicked(bool clicked)
     return;
   }
 
-  // Begin parsing
   try
   {
     RCLCPP_DEBUG_STREAM(node_->get_logger(), "Load joint states from file: " << file_name.toStdString().c_str());
@@ -1105,7 +1052,6 @@ void ControlTabWidget::loadJointStateBtnClicked(bool clicked)
     if (!doc.IsMap())
       return;
 
-    // Read joint names
     const YAML::Node& names = doc["joint_names"];
     if (!names.IsNull() && names.IsSequence())
     {
@@ -1119,7 +1065,6 @@ void ControlTabWidget::loadJointStateBtnClicked(bool clicked)
       return;
     }
 
-    // Read joint values
     const YAML::Node& values = doc["joint_values"];
     if (!values.IsNull() && values.IsSequence())
     {
@@ -1140,7 +1085,7 @@ void ControlTabWidget::loadJointStateBtnClicked(bool clicked)
       return;
     }
   }
-  catch (YAML::ParserException& e)  // Catch errors
+  catch (YAML::ParserException& e)
   {
     RCLCPP_ERROR_STREAM(node_->get_logger(), e.what());
     return;
@@ -1195,7 +1140,6 @@ void ControlTabWidget::computePlan()
     return;
   }
 
-  // Get current joint state as start state
   moveit::core::RobotStatePtr start_state = move_group_->getCurrentState();
   planning_scene_monitor_->waitForCurrentRobotState(rclcpp::Clock(RCL_ROS_TIME).now(), 0.1);
   const planning_scene_monitor::LockedPlanningSceneRO& ps =
@@ -1203,7 +1147,6 @@ void ControlTabWidget::computePlan()
   if (ps)
     start_state.reset(new moveit::core::RobotState(ps->getCurrentState()));
 
-  // Plan motion to the recorded joint state target
   if (auto_progress_->getValue() < joint_states_.size())
   {
     move_group_->setStartState(*start_state);

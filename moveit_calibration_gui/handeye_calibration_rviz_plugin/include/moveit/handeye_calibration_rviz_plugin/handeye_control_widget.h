@@ -36,7 +36,6 @@
 
 #pragma once
 
-// qt
 #include <QFile>
 #include <QLabel>
 #include <QString>
@@ -54,7 +53,6 @@
 #include <QtConcurrent/QtConcurrent>
 #include <QStandardItemModel>
 
-// ros
 #include <tf2_eigen/tf2_eigen.h>
 #include <pluginlib/class_loader.hpp>
 #include <tf2_ros/transform_listener.h>
@@ -224,26 +222,22 @@ private:
 
   QComboBox* calibration_solver_;
 
-  // Load & save pose samples and joint goals
   QPushButton* save_joint_state_btn_;
   QPushButton* load_joint_state_btn_;
   QPushButton* save_camera_pose_btn_;
   QPushButton* load_samples_btn_;
   QPushButton* save_samples_btn_;
 
-  // Manual calibration
   QPushButton* take_sample_btn_;
   QPushButton* delete_latest_btn_;
   QPushButton* reset_sample_btn_;
   QPushButton* solve_btn_;
 
-  // Auto calibration
   QComboBox* group_name_;
   QPushButton* auto_plan_btn_;
   QPushButton* auto_execute_btn_;
   QPushButton* auto_skip_btn_;
 
-  // Progress of finished joint states for auto calibration
   ProgressBarWidget* auto_progress_;
 
   QFutureWatcher<void>* plan_watcher_;
@@ -255,7 +249,6 @@ private:
 
   mhc::SensorMountType sensor_mount_type_;
   std::map<std::string, std::string> frame_names_;
-  // Transform samples
   std::vector<Eigen::Isometry3d> effector_wrt_world_;
   std::vector<Eigen::Isometry3d> object_wrt_sensor_;
   std::string from_frame_tag_;

@@ -46,7 +46,7 @@ void TFFrameNameComboBox::mousePressEvent(QMouseEvent* event)
 
   clear();
   addItem(QString(""));
-  if (robot_model_loader_->getModel())  // Ensure that robot is brought up
+  if (robot_model_loader_->getModel())
   {
     const std::vector<std::string>& robot_links = robot_model_loader_->getModel()->getLinkModelNames();
     for (const std::string& name : names)
@@ -58,7 +58,6 @@ void TFFrameNameComboBox::mousePressEvent(QMouseEvent* event)
         if (it != robot_links.end())
           addItem(QString(name.c_str()));
 
-      // add all frames as potential camera frame
       if (frame_source_ == CAMERA_FRAME)
         addItem(QString(name.c_str()));
 
@@ -86,12 +85,10 @@ SliderWidget::SliderWidget(QWidget* parent, std::string name, double min, double
   QHBoxLayout* row = new QHBoxLayout(this);
   row->setContentsMargins(0, 10, 0, 10);
 
-  // QLabel init
   label_ = new QLabel(QString(name.c_str()), this);
   label_->setContentsMargins(0, 0, 0, 0);
   row->addWidget(label_);
 
-  // QSlider init
   slider_ = new QSlider(Qt::Horizontal, this);
   slider_->setSingleStep(100);
   slider_->setPageStep(100);
@@ -104,7 +101,6 @@ SliderWidget::SliderWidget(QWidget* parent, std::string name, double min, double
 
   connect(slider_, SIGNAL(valueChanged(int)), this, SLOT(changeValue(int)));
 
-  // QLineEdit init
   edit_ = new QLineEdit(this);
   edit_->setMinimumWidth(62);
   edit_->setContentsMargins(0, 0, 0, 0);
@@ -133,21 +129,17 @@ void SliderWidget::changeValue(int value)
 {
   const double double_value = double(value) / 10000;
 
-  // Set textbox
   edit_->setText(QString("%1").arg(double_value, 0, 'f', 4));
 
-  // Send event to parent widget
   Q_EMIT valueChanged(double_value);
 }
 
 void SliderWidget::changeSlider()
 {
-  // Get joint value
   double value = edit_->text().toDouble();
 
   setValue(value);
 
-  // Send event to parent widget
   Q_EMIT valueChanged(value);
 }
 
@@ -168,7 +160,6 @@ ContextTabWidget::ContextTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibrat
   QVBoxLayout* layout_right = new QVBoxLayout();
   layout->addLayout(layout_right);
 
-  // Sensor mount type area
   QGroupBox* group_left_top = new QGroupBox("General Setting", this);
   layout_left->addWidget(group_left_top);
   QFormLayout* layout_left_top = new QFormLayout();
@@ -180,7 +171,6 @@ ContextTabWidget::ContextTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibrat
   layout_left_top->addRow("Sensor configuration", sensor_mount_type_);
   connect(sensor_mount_type_, SIGNAL(activated(int)), this, SLOT(updateSensorMountType(int)));
 
-  // Frame name selection area
   QGroupBox* frame_group = new QGroupBox("Frames Selection", this);
   layout_left->addWidget(frame_group);
   QFormLayout* frame_layout = new QFormLayout();
@@ -204,7 +194,6 @@ ContextTabWidget::ContextTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibrat
   for (std::pair<const std::string, TFFrameNameComboBox*>& frame : frames_)
     connect(frame.second, SIGNAL(activated(int)), this, SLOT(updateFrameName(int)));
 
-  // Camera Pose initial guess area
   QGroupBox* pose_group = new QGroupBox("Camera Pose Initial Guess", this);
   pose_group->setMinimumWidth(300);
   layout_right->addWidget(pose_group);
@@ -235,7 +224,6 @@ ContextTabWidget::ContextTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibrat
     connect(dim.second, SIGNAL(valueChanged(double)), this, SLOT(updateCameraMarkerPose(double)));
   }
 
-  // Variable Initialization
   camera_pose_ = Eigen::Isometry3d::Identity();
   fov_pose_ = Eigen::Quaterniond(0.5, -0.5, 0.5, -0.5);
   fov_pose_.translate(Eigen::Vector3d(0.0149, 0.0325, 0.0125));
@@ -339,7 +327,6 @@ void ContextTabWidget::updateAllMarkers()
     {
       for (std::pair<const std::string, TFFrameNameComboBox*> frame : frames_)
       {
-        // Publish selected frame axis
         const std::string& frame_id = frame.second->currentText().toStdString();
         if (!frame_id.empty())
         {
@@ -350,7 +337,6 @@ void ContextTabWidget::updateAllMarkers()
       }
       RCLCPP_INFO_STREAM(node_->get_logger(), "Selected frame: " << from_frame.toStdString());
 
-      // Publish camera and fov marker
       QString to_frame = frames_["sensor"]->currentText();
       RCLCPP_INFO_STREAM(node_->get_logger(), "here");
       QString to_cam_base_frame = frames_["camera_base"]->currentText();
@@ -359,19 +345,14 @@ void ContextTabWidget::updateAllMarkers()
       if (sensor_to_camera_base_initialized_)
       {
         to_frame = to_cam_base_frame;
-      }
-      RCLCPP_INFO_STREAM(node_->get_logger(), "Sensor frame: " << to_frame.toStdString());
 
-      if (!to_frame.isEmpty())
-      {
-        // // Get camera pose guess
+        RCLCPP_INFO_STREAM(node_->get_logger(), "Sensor frame: " << to_frame.toStdString());
+
         setCameraPose(guess_pose_["Tx"]->getValue(), guess_pose_["Ty"]->getValue(), guess_pose_["Tz"]->getValue(),
                       guess_pose_["Rx"]->getValue(), guess_pose_["Ry"]->getValue(), guess_pose_["Rz"]->getValue());
 
-        // Publish new transform from robot base or end-effector to sensor frame
         tf_tools_->publishTransform(camera_pose_, from_frame.toStdString(), to_frame.toStdString());
 
-        // Publish new FOV marker
         if (calibration_display_->fov_marker_enabled_property_->getBool())
         {
           shape_msgs::msg::Mesh mesh =
@@ -380,10 +361,12 @@ void ContextTabWidget::updateAllMarkers()
           visual_tools_->setAlpha(calibration_display_->fov_marker_alpha_property_->getFloat());
           visual_tools_->publishMesh(fov_pose_, mesh, rvt::YELLOW, 1.0, "fov", 1);
         }
-      }
-    }
 
+      }
+
+    }
     visual_tools_->trigger();
+
   }
   else
     RCLCPP_ERROR(node_->get_logger(), "Visual or TF tool is NULL.");
@@ -397,7 +380,6 @@ void ContextTabWidget::updateFOVPose()
   {
     try
     {
-      // Get FOV pose W.R.T sensor frame
       tf_msg = tf_buffer_->lookupTransform(sensor_frame.toStdString(), optical_frame_, rclcpp::Time(0));
       fov_pose_ = tf2::transformToEigen(tf_msg);
       RCLCPP_DEBUG_STREAM(node_->get_logger(), "FOV pose from '" << sensor_frame.toStdString() << "' to '"
@@ -425,17 +407,13 @@ shape_msgs::msg::Mesh ContextTabWidget::getCameraFOVMesh(const sensor_msgs::msg:
   std::vector<double> x_cords = { -delta_x, delta_x };
   std::vector<double> y_cords = { -delta_y, delta_y };
 
-  // Get corners
   mesh.vertices.clear();
-  // Add the first corner at origin of the optical frame
   mesh.vertices.push_back(geometry_msgs::msg::Point());
 
-  // Add the four corners at bottom
   for (const double& x_it : x_cords)
     for (const double& y_it : y_cords)
     {
       geometry_msgs::msg::Point vertex;
-      // Check in case camera info is not valid
       if (std::isfinite(x_it) && std::isfinite(y_it) && std::isfinite(max_dist))
       {
         vertex.x = x_it;
@@ -445,7 +423,6 @@ shape_msgs::msg::Mesh ContextTabWidget::getCameraFOVMesh(const sensor_msgs::msg:
       mesh.vertices.push_back(vertex);
     }
 
-  // Get surface triangles
   mesh.triangles.resize(4);
   mesh.triangles[0].vertex_indices = { 0, 1, 2 };
   mesh.triangles[1].vertex_indices = { 0, 2, 4 };
@@ -494,11 +471,6 @@ void ContextTabWidget::setCameraPose(double tx, double ty, double tz, double rx,
   camera_pose_.setIdentity();
   if (sensor_to_camera_base_initialized_) 
   {
-    // Apply the stored transform: robot_to_base = robot_to_sensor * sensor_to_base
-    camera_pose_ = visual_tools_->convertFromXYZRPY(tx, ty, tz, rx, ry, rz, rviz_visual_tools::XYZ);
-  } 
-  else 
-  {
     camera_pose_ = visual_tools_->convertFromXYZRPY(tx, ty, tz, rx, ry, rz, rviz_visual_tools::XYZ);  
   }
 }
@@ -529,7 +501,6 @@ void ContextTabWidget::setCamBaseFrame(const std::string& frame_id)
 
 void ContextTabWidget::updateCameraPose(double tx, double ty, double tz, double rx, double ry, double rz)
 {
-  // setCameraPose(tx, ty, tz, rx, ry, rz);
   guess_pose_["Tx"]->setValue(tx);
   guess_pose_["Ty"]->setValue(ty);
   guess_pose_["Tz"]->setValue(tz);

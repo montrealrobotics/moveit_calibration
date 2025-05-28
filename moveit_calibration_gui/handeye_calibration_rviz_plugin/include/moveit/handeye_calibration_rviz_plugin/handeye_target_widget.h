@@ -220,7 +220,7 @@ private:
   // Variables
   // **************************************************************
   cv::Mat target_image_;
-
+  bool first_loop_;
   std::string optical_frame_;
   std::string plugin_name_;
 

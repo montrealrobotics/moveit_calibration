@@ -136,19 +136,16 @@ public:
 
 private Q_SLOTS:
 
-  // Called when the slider is changed
   void changeValue(int value);
 
-  // Called when the edit box is changed
   void changeSlider();
 
 Q_SIGNALS:
 
-  // Indicate value when slider widget changed
   void valueChanged(double value);
 
 private:
-  // Max & min position
+
   double max_position_;
   double min_position_;
 };
@@ -199,13 +196,10 @@ public Q_SLOTS:
 
 private Q_SLOTS:
 
-  // Called when the sensor_mount_type_ changed
   void updateSensorMountType(int index);
 
-  // Called when the TFFrameNameComboBox changed
   void updateFrameName(int index);
 
-  // Called when the slider of initial camera pose guess changed
   void updateCameraMarkerPose(double value);
 
 Q_SIGNALS:
@@ -221,13 +215,10 @@ private:
   // Qt components
   // **************************************************************
 
-  // Calibration algorithm, sensor mount type area
   QComboBox* sensor_mount_type_;
 
-  // Frame selection area
   std::map<std::string, TFFrameNameComboBox*> frames_;
 
-  // Initial camera pose
   std::map<std::string, SliderWidget*> guess_pose_;
 
   // **************************************************************
