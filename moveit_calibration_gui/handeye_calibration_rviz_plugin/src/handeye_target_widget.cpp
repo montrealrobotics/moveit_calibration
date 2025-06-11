@@ -38,6 +38,43 @@
 
 namespace moveit_rviz_plugin
 {
+void RosTopicComboBox::addMsgsFilterType(QString msgs_type)
+{
+  message_types_.insert(msgs_type);
+}
+
+bool RosTopicComboBox::hasTopic(const QString& topic_name)
+{
+  getFilteredTopics();
+  return image_topics_.contains(topic_name);
+}
+
+bool RosTopicComboBox::getFilteredTopics()
+{
+  // Get all topic names
+  std::map<std::string, std::vector<std::string>> topic_names_and_types = node_->get_topic_names_and_types();
+  image_topics_.clear();
+  // Filter out the topic names with specific topic type
+  for (const auto& topic_info : topic_names_and_types)
+  {
+    std::for_each(topic_info.second.begin(), topic_info.second.end(), [&](std::string topic_type) {
+      if (message_types_.contains(QString(topic_type.c_str())))
+      {
+        image_topics_.insert(QString(topic_info.first.c_str()));
+      }
+    });
+  }
+
+  clear();
+  addItem(QString(""));
+  for (const QString& topic : image_topics_)
+  {
+    addItem(topic);
+  }
+
+  return !image_topics_.isEmpty();
+}
+
 void RosTopicComboBox::mousePressEvent(QMouseEvent* event)
 {
   getFilteredTopics();
@@ -106,10 +143,11 @@ TargetTabWidget::TargetTabWidget(rclcpp::Node::SharedPtr node, HandEyeCalibratio
   QFormLayout* layout_left_bottom = new QFormLayout();
   group_left_bottom->setLayout(layout_left_bottom);
 
-  camera_topic_line_edit_ = new QLineEdit(this);
-  layout_left_bottom->addRow("Camera Image Topic", camera_topic_line_edit_);
-
-  connect(camera_topic_line_edit_, &QLineEdit::editingFinished, this, &TargetTabWidget::cameraTopicLineEditChanged);
+  ros_topics_.insert(std::make_pair("image_topic", new RosTopicComboBox(node_, this)));
+  ros_topics_["image_topic"]->addMsgsFilterType("sensor_msgs/msg/Image");
+  layout_left_bottom->addRow("Camera Image Topic", ros_topics_["image_topic"]);
+  connect(ros_topics_["image_topic"], SIGNAL(activated(const QString&)), this,
+          SLOT(imageTopicComboboxChanged(const QString&)));
 
   QGroupBox* group_right = new QGroupBox("Target", this);
   group_right->setMinimumWidth(330);
@@ -262,11 +300,29 @@ void TargetTabWidget::loadWidget(const rviz_common::Config& config)
     }
   }
 
-  QString camera_topic;
-  if (config.mapGetString("camera_topic_line_edit", &camera_topic))
+  for (const std::pair<const std::string, RosTopicComboBox*>& topic : ros_topics_)
   {
-    camera_topic_line_edit_->setText(camera_topic);
-    cameraTopicLineEditChanged();
+    QString topic_name;
+    if (config.mapGetString(topic.first.c_str(), &topic_name))
+    {
+      if (topic.second->hasTopic(topic_name))
+      {
+        topic.second->setCurrentText(topic_name);
+        try
+        {
+          if (!topic.first.compare("image_topic"))
+          {
+            camera_sub_.shutdown();
+            camera_sub_ = it_.subscribeCamera(topic_name.toStdString(), 1, &TargetTabWidget::cameraCallback, this);
+          }
+        }
+        catch (const image_transport::TransportLoadException& e)
+        {
+          RCLCPP_ERROR_STREAM(node_->get_logger(),
+                              "Subscribe to " << topic_name.toStdString() << " fail: " << e.what());
+        }
+      }
+    }
   }
 
   updateParameterVisibility();
@@ -465,31 +521,6 @@ bool TargetTabWidget::createTargetInstance()
   return true;
 }
 
-void TargetTabWidget::cameraTopicLineEditChanged()
-{
-  camera_sub_.shutdown();
-
-  calibration_display_->setStatusStd(rviz_common::properties::StatusProperty::Warn, "Target detection",
-                                     "Not subscribed to image topic.");
-
-  QString topic = camera_topic_line_edit_->text();
-
-  if (!topic.isEmpty())
-  {
-    try
-    {
-      camera_sub_ = it_.subscribeCamera(topic.toStdString(), 1, &TargetTabWidget::cameraCallback, this);
-    }
-    catch (image_transport::TransportLoadException& e)
-    {
-      RCLCPP_ERROR_STREAM(node_->get_logger(),
-                          "Subscribe to image topic: " << topic.toStdString() << " failed. " << e.what());
-      calibration_display_->setStatusStd(rviz_common::properties::StatusProperty::Error, "Target detection",
-                                         "Failed to subscribe to image topic.");
-    }
-  }
-}
-
 void TargetTabWidget::cameraCallback(const sensor_msgs::msg::Image::ConstSharedPtr& image,
                                      const sensor_msgs::msg::CameraInfo::ConstSharedPtr& camera_info)
 {
@@ -675,6 +706,28 @@ void TargetTabWidget::saveTargetImageBtnClicked(bool clicked)
 
   if (!cv::imwrite(cv::String(fileName.toStdString()), target_image_))
     RCLCPP_ERROR_STREAM(node_->get_logger(), "Error OpenCV saving image.");
+}
+
+void TargetTabWidget::imageTopicComboboxChanged(const QString& topic)
+{
+  camera_sub_.shutdown();
+
+  calibration_display_->setStatusStd(rviz_common::properties::StatusProperty::Warn, "Target detection",
+                                     "Not subscribed to image topic.");
+  if (!topic.isNull() and !topic.isEmpty())
+  {
+    try
+    {
+      camera_sub_ = it_.subscribeCamera(topic.toStdString(), 1, &TargetTabWidget::cameraCallback, this);
+    }
+    catch (image_transport::TransportLoadException& e)
+    {
+      RCLCPP_ERROR_STREAM(node_->get_logger(),
+                          "Subscribe to image topic: " << topic.toStdString() << " failed. " << e.what());
+      calibration_display_->setStatusStd(rviz_common::properties::StatusProperty::Error, "Target detection",
+                                         "Failed to subscribe to image topic.");
+    }
+  }
 }
 
 }  // namespace moveit_rviz_plugin

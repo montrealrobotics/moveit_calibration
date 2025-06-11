@@ -97,7 +97,6 @@ HandEyeCalibrationFrame::HandEyeCalibrationFrame(HandEyeCalibrationDisplay* pdis
   };
   executor_thread_ = std::thread(spin);
 
-  RCLCPP_INFO_STREAM(node_->get_logger(), "handeye calibration gui created.");
 }
 
 HandEyeCalibrationFrame::~HandEyeCalibrationFrame() = default;
@@ -115,7 +114,6 @@ void HandEyeCalibrationFrame::loadWidget(const rviz_common::Config& config)
   tab_context_->loadWidget(config);
   tab_control_->loadWidget(config);
 
-  RCLCPP_INFO_STREAM(node_->get_logger(), "handeye calibration gui loaded.");
 }
 
 }  // namespace moveit_rviz_plugin

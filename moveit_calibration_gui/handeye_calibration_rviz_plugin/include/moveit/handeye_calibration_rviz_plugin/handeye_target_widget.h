@@ -160,7 +160,8 @@ private Q_SLOTS:
   // Called when the save_target_btn clicked
   void saveTargetImageBtnClicked(bool clicked);
 
-  void cameraTopicLineEditChanged();
+  // Called when the item of image_topic_field_ combobox is selected
+  void imageTopicComboboxChanged(const QString& topic);
 
 Q_SIGNALS:
 

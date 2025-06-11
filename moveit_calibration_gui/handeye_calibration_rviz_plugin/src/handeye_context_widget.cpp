@@ -301,7 +301,7 @@ void ContextTabWidget::updateSensorToCameraBaseTransform(const Eigen::Isometry3d
 
 void ContextTabWidget::updateAllMarkers()
 {
-  RCLCPP_INFO_STREAM(node_->get_logger(), "Updating all markers.");
+  RCLCPP_DEBUG_STREAM(node_->get_logger(), "Updating all markers.");
   if (visual_tools_ && tf_tools_)
   {
     visual_tools_->deleteAllMarkers();
@@ -335,18 +335,13 @@ void ContextTabWidget::updateAllMarkers()
           visual_tools_->publishAxisLabeled(Eigen::Isometry3d::Identity(), frame_id);
         }
       }
-      RCLCPP_INFO_STREAM(node_->get_logger(), "Selected frame: " << from_frame.toStdString());
 
       QString to_frame = frames_["sensor"]->currentText();
-      RCLCPP_INFO_STREAM(node_->get_logger(), "here");
       QString to_cam_base_frame = frames_["camera_base"]->currentText();
-      RCLCPP_INFO_STREAM(node_->get_logger(), "Sensor base frame: " << to_cam_base_frame.toStdString());
 
       if (sensor_to_camera_base_initialized_)
       {
         to_frame = to_cam_base_frame;
-
-        RCLCPP_INFO_STREAM(node_->get_logger(), "Sensor frame: " << to_frame.toStdString());
 
         setCameraPose(guess_pose_["Tx"]->getValue(), guess_pose_["Ty"]->getValue(), guess_pose_["Tz"]->getValue(),
                       guess_pose_["Rx"]->getValue(), guess_pose_["Ry"]->getValue(), guess_pose_["Rz"]->getValue());
@@ -522,7 +517,6 @@ void ContextTabWidget::updateSensorMountType(int index)
 
 void ContextTabWidget::updateFrameName(int index)
 {
-  RCLCPP_INFO(node_->get_logger(), "updating");
   updateAllMarkers();
   updateFOVPose();
 
@@ -543,7 +537,6 @@ void ContextTabWidget::updateFrameName(int index)
     calibration_display_->setStatus(rviz_common::properties::StatusProperty::Ok, "Calibration context",
                                     "Calibration frames have been selected.");
   }
-  RCLCPP_INFO(node_->get_logger(), "emmittung");
   Q_EMIT frameNameChanged(names);
 }
 

@@ -507,9 +507,8 @@ bool ControlTabWidget::solveCameraRobotPose()
       }
 
       Eigen::Vector3d t = camera_robot_pose_.translation();
-      Eigen::Vector3d r = camera_robot_pose_.rotation().eulerAngles(0, 1, 2);
-      Q_EMIT sensorPoseUpdate(t[0], t[1], t[2], r[0], r[1], r[2]);
-      RCLCPP_INFO_STREAM(node_->get_logger(), "roll" << r[0]);
+      Eigen::Vector3d r = camera_robot_pose_.rotation().eulerAngles(2, 1, 0);
+      Q_EMIT sensorPoseUpdate(t[0], t[1], t[2], r[2], r[1], r[0]);
 
       const std::string& from_frame = frame_names_[from_frame_tag_];
       const std::string& to_frame = sensor_to_camera_base_initialized_ ? 
@@ -521,7 +520,7 @@ bool ControlTabWidget::solveCameraRobotPose()
         tf_tools_->clearAllTransforms();
         calibration_display_->setStatus(rviz_common::properties::StatusProperty::Ok, "Calibration",
                                         "Calibration successful.");
-        RCLCPP_INFO_STREAM(node_->get_logger(), "Publish camera transformation"
+        RCLCPP_INFO_STREAM(node_->get_logger(), "Publishing calibrated camera transformation"
                                                     << std::endl
                                                     << camera_robot_pose_.matrix() << std::endl
                                                     << "from " << from_frame_tag_ << " frame '" << from_frame << "'"
@@ -645,14 +644,13 @@ void ControlTabWidget::updateFrameNames(std::map<std::string, std::string> names
 {
   std::string prev_sensor_frame = frame_names_["sensor"];
   std::string prev_camera_base_frame = frame_names_["camera_base"];
-  RCLCPP_INFO_STREAM(node_->get_logger(), "Updating frame names: " << names["sensor"] << " " << names["camera_base"]);
-  RCLCPP_INFO_STREAM(node_->get_logger(), "Updating frame names: " << prev_sensor_frame << " " << prev_camera_base_frame);
+  RCLCPP_DEBUG_STREAM(node_->get_logger(), "Updating frame names: " << names["sensor"] << " " << names["camera_base"]);
+  RCLCPP_DEBUG_STREAM(node_->get_logger(), "Previous frame names: " << prev_sensor_frame << " " << prev_camera_base_frame);
   frame_names_ = names;
   bool sensor_frame_changed = (prev_sensor_frame != frame_names_["sensor"]);
   bool camera_base_frame_changed = (prev_camera_base_frame != frame_names_["camera_base"]);
   
   if (sensor_frame_changed || camera_base_frame_changed) {
-    RCLCPP_INFO(node_->get_logger(), "Updating cam frame names");
     if (tf_tools_)
     {
       tf_tools_->clearAllTransforms();
@@ -1096,7 +1094,6 @@ void ControlTabWidget::loadJointStateBtnClicked(bool clicked)
     auto_progress_->setMax(joint_states_.size());
     auto_progress_->setValue(0);
   }
-  RCLCPP_INFO_STREAM(node_->get_logger(), "Loaded and parsed: " << file_name.toStdString());
 }
 
 void ControlTabWidget::autoPlanBtnClicked(bool clicked)
